@@ -7,7 +7,7 @@ WEB_DIR := apps/web
 API_VENV := $(API_DIR)/.venv
 API_BIN := $(API_VENV)/bin
 
-.PHONY: help install install-api install-web hooks dev-api dev-web format format-check lint typecheck test build audit check infra-up infra-down infra-logs compose-config compose-build clean
+.PHONY: help install install-api install-web hooks dev-api dev-web format format-check lint typecheck test build audit check infra-up infra-down infra-logs compose-config compose-build migrate-up migrate-down migrate-new clean
 
 help: ## Show available development commands.
 	@awk 'BEGIN {FS = ":.*## "; printf "NambikkAI Guardian commands:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -76,6 +76,15 @@ compose-config: ## Validate the resolved Docker Compose configuration.
 
 compose-build: ## Build production API and web container images.
 	docker compose --profile application build api web
+
+migrate-up: ## Apply database migrations up to head.
+	$(API_BIN)/alembic -c infra/migrations/alembic.ini upgrade head
+
+migrate-down: ## Revert the most recent database migration.
+	$(API_BIN)/alembic -c infra/migrations/alembic.ini downgrade -1
+
+migrate-new: ## Autogenerate a migration; usage: make migrate-new m="describe change".
+	$(API_BIN)/alembic -c infra/migrations/alembic.ini revision --autogenerate -m "$(m)"
 
 clean: ## Remove generated local build and coverage output.
 	rm -rf $(API_DIR)/.coverage $(API_DIR)/htmlcov $(WEB_DIR)/.next $(WEB_DIR)/coverage

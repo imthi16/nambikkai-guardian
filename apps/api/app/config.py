@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     auth_rate_limit_window_seconds: int = 60
     max_upload_bytes: int = 25 * 1024 * 1024
     download_url_ttl_seconds: int = 300
+    ingestion_queue_key: str = "nambikkai:ingestion:queue"
+    ingestion_dead_letter_key: str = "nambikkai:ingestion:dead"
+    ingestion_max_attempts: int = 3
+    ingestion_stale_after_seconds: int = 300
 
     @model_validator(mode="after")
     def enforce_deployment_secrets(self) -> Self:

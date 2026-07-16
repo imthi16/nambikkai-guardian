@@ -29,7 +29,8 @@ Start the API with `make dev-api` and visit `http://127.0.0.1:8000/health` or th
 - `make test` runs backend and frontend coverage suites.
 - `make build` creates the production Next.js bundle.
 - `make audit` checks installed Python and locked npm dependencies for known vulnerabilities.
-- `make compose-build` builds non-root API and web images.
+- `make compose-build` builds non-root API and web images; the API build also imports the packaged
+  application to catch runtime dependency or container-layout configuration failures.
 - `make check` runs the primary local quality suite.
 
 Do not lower a threshold to make a change pass. Add deterministic tests for real behavior and add

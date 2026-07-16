@@ -8,11 +8,21 @@ from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["development", "test", "staging", "production"]
-_ROOT_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
 _UNSAFE_JWT_SECRETS = {
     "development-only-change-me",
     "replace-with-a-long-random-value",
 }
+
+
+def _find_repository_env(module_path: Path) -> Path | None:
+    """Locate the repository `.env` without assuming a source-tree depth."""
+    for parent in module_path.resolve().parents:
+        if (parent / "AGENTS.md").is_file():
+            return parent / ".env"
+    return None
+
+
+_ROOT_ENV_FILE = _find_repository_env(Path(__file__))
 
 
 class Settings(BaseSettings):

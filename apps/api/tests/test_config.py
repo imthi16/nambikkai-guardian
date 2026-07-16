@@ -1,9 +1,10 @@
 """Configuration safety tests."""
 
+from pathlib import Path
 from typing import cast
 
 import pytest
-from app.config import Environment, Settings
+from app.config import Environment, Settings, _find_repository_env
 from pydantic import ValidationError
 
 
@@ -39,3 +40,19 @@ def test_production_rejects_local_object_storage_secret() -> None:
             jwt_secret="a-production-secret-provided-by-a-secret-manager",
             _env_file=None,
         )
+
+
+def test_repository_env_is_discovered_from_marker(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    module_path = repository / "apps" / "api" / "app" / "config.py"
+    module_path.parent.mkdir(parents=True)
+    (repository / "AGENTS.md").touch()
+
+    assert _find_repository_env(module_path) == repository / ".env"
+
+
+def test_container_layout_without_repository_marker_has_no_env_file(tmp_path: Path) -> None:
+    module_path = tmp_path / "app" / "app" / "config.py"
+    module_path.parent.mkdir(parents=True)
+
+    assert _find_repository_env(module_path) is None

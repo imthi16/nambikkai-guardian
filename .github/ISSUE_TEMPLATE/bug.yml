@@ -1,0 +1,42 @@
+name: Bug report
+description: Report reproducible incorrect behavior without including sensitive data.
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Never attach credentials, private documents, PII, or complete sensitive prompts.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+      description: Include sanitized errors and stable error codes where available.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest safe, deterministic reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Security and tenant impact
+      description: State whether authorization, data exposure, prompt injection, or provenance is involved.
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Commit or version
+      placeholder: e704471 or v0.1.0
+    validations:
+      required: true

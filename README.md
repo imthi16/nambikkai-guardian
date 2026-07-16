@@ -48,47 +48,51 @@ Async ingestion workers
 apps/
   api/                   FastAPI service
   web/                   Next.js application
-services/                Planned ingestion, retrieval, verification, and safety modules
-packages/                Planned shared contracts, configuration, and observability
-infra/                   Planned migrations, containers, and monitoring
- docs/                   Architecture and implementation plan
+services/                Ingestion, retrieval, verification, and safety boundaries
+packages/                Shared contracts, configuration, and observability
+infra/                   Migrations, containers, and monitoring
+tests/                   Cross-service integration and evaluation suites
+docs/                    Architecture, backlog, configuration, and development guides
 ```
 
 ## Local setup
 
-### 1. Start infrastructure
+### 1. Install dependencies
 
 ```bash
 cp .env.example .env
-docker compose up -d
+make install
 ```
 
-### 2. Start the API
+### 2. Start infrastructure
 
 ```bash
-cd apps/api
-python -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-uvicorn app.main:app --reload --port 8000
+make infra-up
 ```
 
-Open `http://localhost:8000/health`.
+### 3. Start the applications
 
-### 3. Start the web application
+Run these in separate terminals:
 
 ```bash
-cd apps/web
-npm install
-npm run dev
+make dev-api
+make dev-web
 ```
 
-Open `http://localhost:3000`.
+Open `http://127.0.0.1:8000/api/v1/health` and `http://127.0.0.1:3000`.
+
+Run the complete local quality suite with `make check`. See
+[`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) for all commands and
+[`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) for environment settings.
 
 ## Development guidance
 
-Read [`AGENTS.md`](./AGENTS.md) before using Codex, Claude Code, or another coding agent. The complete staged build is in [`docs/IMPLEMENTATION_PLAN.md`](./docs/IMPLEMENTATION_PLAN.md).
+Read [`AGENTS.md`](./AGENTS.md) before using Codex, Claude Code, or another coding agent. The
+complete staged build is in [`docs/IMPLEMENTATION_PLAN.md`](./docs/IMPLEMENTATION_PLAN.md), and
+the issue dependency graph is in [`docs/BACKLOG.md`](./docs/BACKLOG.md).
 
 ## Current status
 
-The repository contains the project foundation. The next milestone is authentication, workspace isolation, database migrations, and the secure upload workflow.
+The engineering foundation is under active review in issue #1. Product features remain deliberately
+separated into issues #2–#26 so database, authentication, tenancy, ingestion, retrieval, generation,
+verification, security, UI, evaluation, and deployment each receive a focused pull request.

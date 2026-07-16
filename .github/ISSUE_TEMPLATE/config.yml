@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/imthi16/nambikkai-guardian/security/policy
+    about: Do not disclose vulnerabilities, credentials, or private documents in a public issue.

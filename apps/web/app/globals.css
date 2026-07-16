@@ -1,0 +1,179 @@
+:root {
+  color-scheme: light;
+  --ink: #10221d;
+  --muted: #50635d;
+  --paper: #f4f1e8;
+  --panel: #fffdf7;
+  --line: #cbd2c7;
+  --accent: #087e62;
+  --accent-dark: #075b49;
+  --warning: #a15311;
+  --danger: #a02c2c;
+  font-family: Inter, "Noto Sans Tamil", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 10;
+  top: 1rem;
+  left: 1rem;
+  padding: 0.75rem 1rem;
+  transform: translateY(-200%);
+  background: var(--ink);
+  color: white;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+main {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 5rem 0;
+}
+
+.hero {
+  max-width: 900px;
+  padding: 5rem 0 6rem;
+}
+
+.eyebrow,
+.section-kicker,
+.state-label {
+  margin: 0 0 1rem;
+  color: var(--accent-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  text-wrap: pretty;
+}
+
+h1 {
+  max-width: 850px;
+  margin: 0;
+  font-size: clamp(3rem, 8vw, 6.6rem);
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+}
+
+h2 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+
+.hero-copy {
+  max-width: 720px;
+  margin: 2rem 0 0;
+  color: var(--muted);
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  line-height: 1.65;
+}
+
+.tamil-sample {
+  width: fit-content;
+  margin: 2rem 0 0;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--accent);
+  background: var(--panel);
+  font-size: 1rem;
+}
+
+.capabilities,
+.state-section {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(0, 1.25fr);
+  gap: 4rem;
+  padding: 5rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.capability-grid,
+.state-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.capability-card,
+.system-state {
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.capability-card h3,
+.system-state h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1.15rem;
+}
+
+.capability-card p,
+.system-state > p:last-child {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.system-state[data-state="partial"] {
+  border-left: 5px solid var(--warning);
+}
+
+.system-state[data-state="error"] {
+  border-left: 5px solid var(--danger);
+}
+
+.system-state[data-state="refusal"] {
+  border-left: 5px solid var(--accent);
+}
+
+@media (max-width: 760px) {
+  main {
+    padding: 2rem 0;
+  }
+
+  .hero {
+    padding: 4rem 0;
+  }
+
+  .capabilities,
+  .state-section {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    padding: 3.5rem 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

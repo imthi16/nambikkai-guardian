@@ -3,6 +3,7 @@
 !.env.example
 node_modules/
 .next/
+*.tsbuildinfo
 dist/
 build/
 __pycache__/
@@ -14,6 +15,9 @@ __pycache__/
 venv/
 coverage/
 htmlcov/
+.coverage
+.coverage.*
+coverage-summary.json
 .DS_Store
 .idea/
 .vscode/
@@ -21,3 +25,4 @@ htmlcov/
 storage/
 models/
 artifacts/
+.envrc

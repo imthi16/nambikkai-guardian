@@ -1,0 +1,47 @@
+name: Feature
+description: Propose one independently reviewable product or engineering feature.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and outcome
+      description: Describe the user or system problem and the measurable outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: List in-scope behavior and explicitly excluded follow-up work.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Link prerequisite issues or write "None".
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use verifiable statements, including failure and abstention behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security, tenancy, and privacy
+      description: Explain authorization boundaries, untrusted inputs, sensitive data, and audit needs.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Tests, evaluations, and observability
+      description: Identify required test layers, AI metrics, logs, traces, and alerts.
+    validations:
+      required: true

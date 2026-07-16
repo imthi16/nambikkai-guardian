@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import "./globals.css";
+
 export const metadata: Metadata = {
   title: "NambikkAI Guardian",
   description: "Evidence-first Tamil, Tanglish, and English document intelligence.",
@@ -9,14 +11,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body
-        style={{
-          margin: 0,
-          background: "#f5f7fb",
-          color: "#172033",
-          fontFamily: "Arial, sans-serif",
-        }}
-      >
+      <body>
+        <a className="skip-link" href="#main-content">
+          Skip to main content
+        </a>
         {children}
       </body>
     </html>

@@ -1,0 +1,6 @@
+.git
+.next
+.venv
+coverage
+node_modules
+package-lock.json

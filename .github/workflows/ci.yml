@@ -5,8 +5,16 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   api:
+    name: API quality
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -16,13 +24,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
+      - run: ruff format --check app tests
       - run: ruff check app tests
-      - run: mypy app
+      - run: mypy
       - run: pytest
 
   web:
+    name: Web quality
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,7 +46,62 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
-      - run: npm install --package-lock-only
       - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
       - run: npm run typecheck
+      - run: npm run test:coverage
       - run: npm run build
+
+  containers:
+    name: Container validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+      - name: Start and verify local infrastructure
+        run: make infra-up
+      - name: Show healthy service status
+        run: docker compose ps
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: apps/api
+          file: apps/api/Dockerfile
+          push: false
+      - uses: docker/build-push-action@v6
+        with:
+          context: apps/web
+          file: apps/web/Dockerfile
+          push: false
+      - name: Stop local infrastructure
+        if: always()
+        run: make infra-down
+
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e "apps/api[dev]"
+      - run: pip-audit --skip-editable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm --prefix apps/web audit --audit-level=high
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

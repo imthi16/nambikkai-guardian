@@ -1,30 +1,72 @@
+import { SystemState } from "../components/system-state";
+
 const capabilities = [
-  "Tamil, Tanglish, and English document understanding",
-  "Hybrid retrieval with exact page and span citations",
-  "Claim verification and evidence-based refusal",
-  "Prompt-injection detection and document quarantine",
+  {
+    title: "Multilingual by design",
+    description: "Tamil, Tanglish, and English remain first-class query and document languages.",
+  },
+  {
+    title: "Evidence before answers",
+    description: "Page-level evidence and claim verification determine whether an answer is safe.",
+  },
+  {
+    title: "Untrusted documents",
+    description: "Retrieved text is treated as data and never as an instruction to the system.",
+  },
 ];
 
 export default function HomePage() {
   return (
-    <main style={{ maxWidth: 960, margin: "0 auto", padding: "72px 24px" }}>
-      <p style={{ fontWeight: 700, letterSpacing: 1.2 }}>NAMBIKKAI GUARDIAN</p>
-      <h1 style={{ fontSize: 56, lineHeight: 1.05, margin: "16px 0" }}>
-        Document AI that proves its answers.
-      </h1>
-      <p style={{ fontSize: 20, lineHeight: 1.6, maxWidth: 760 }}>
-        A secure, evidence-first intelligence platform for Tamil, Tanglish, and English
-        documents. The system cites its sources, verifies claims, and refuses unsupported
-        answers.
-      </p>
+    <main id="main-content">
+      <section className="hero" aria-labelledby="hero-title">
+        <p className="eyebrow">NAMBIKKAI GUARDIAN</p>
+        <h1 id="hero-title">Document intelligence that proves its answers.</h1>
+        <p className="hero-copy">
+          A secure foundation for evidence-grounded answers across Tamil, Tanglish, and English
+          documents. Unsupported answers are refused, not improvised.
+        </p>
+        <p lang="ta" className="tamil-sample">
+          ஆதாரத்துடன் பதில். ஆதாரம் இல்லையெனில் மறுப்பு.
+        </p>
+      </section>
 
-      <section style={{ marginTop: 48 }}>
-        <h2>Planned MVP capabilities</h2>
-        <ul style={{ fontSize: 18, lineHeight: 1.8 }}>
+      <section className="capabilities" aria-labelledby="capabilities-title">
+        <div>
+          <p className="section-kicker">TRUST MODEL</p>
+          <h2 id="capabilities-title">Safety is part of the architecture.</h2>
+        </div>
+        <div className="capability-grid">
           {capabilities.map((capability) => (
-            <li key={capability}>{capability}</li>
+            <article className="capability-card" key={capability.title}>
+              <h3>{capability.title}</h3>
+              <p>{capability.description}</p>
+            </article>
           ))}
-        </ul>
+        </div>
+      </section>
+
+      <section className="state-section" aria-labelledby="state-title">
+        <div>
+          <p className="section-kicker">EXPLICIT OUTCOMES</p>
+          <h2 id="state-title">Every uncertain state has a clear response.</h2>
+        </div>
+        <div className="state-grid">
+          <SystemState
+            title="Not enough evidence"
+            description="The answer pauses until an authorized source supports the request."
+            state="refusal"
+          />
+          <SystemState
+            title="Partial support"
+            description="Supported claims remain visible while gaps are called out explicitly."
+            state="partial"
+          />
+          <SystemState
+            title="Processing error"
+            description="Failures stay actionable without exposing internal implementation details."
+            state="error"
+          />
+        </div>
       </section>
     </main>
   );

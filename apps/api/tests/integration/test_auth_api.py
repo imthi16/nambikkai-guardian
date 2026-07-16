@@ -13,29 +13,13 @@ import pytest
 from app.auth import tokens
 from app.config import Settings
 from app.db.models.identity import RefreshToken, User
-from app.db.session import get_db_session
-from app.main import create_app
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tests.integration.apptools import build_client, build_settings
+
 EMAIL = "priya@example.com"
 PASSWORD = "a-strong-passphrase"
-
-
-def build_settings() -> Settings:
-    """Settings with a rate limit generous enough not to interfere with tests."""
-    return Settings(auth_rate_limit_attempts=1000)
-
-
-def build_client(db_session: AsyncSession, settings: Settings) -> httpx.AsyncClient:
-    application = create_app(settings)
-
-    async def _use_test_session() -> AsyncIterator[AsyncSession]:
-        yield db_session
-
-    application.dependency_overrides[get_db_session] = _use_test_session
-    transport = httpx.ASGITransport(app=application)
-    return httpx.AsyncClient(transport=transport, base_url="http://testserver")
 
 
 @pytest.fixture

@@ -24,7 +24,7 @@ def unique(prefix: str) -> str:
 
 async def make_user(session: AsyncSession, email: str | None = None) -> User:
     user = User(
-        email=email or f"{unique('user')}@example.test",
+        email=email or f"{unique('user')}@example.com",
         password_hash="x" * 60,
         full_name="Synthetic User",
     )

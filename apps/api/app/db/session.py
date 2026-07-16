@@ -1,9 +1,11 @@
 """Async engine construction, session factories, and transaction scopes."""
 
+import uuid
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from functools import lru_cache
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -51,3 +53,17 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency yielding one transactional session per request."""
     async with session_scope() as session:
         yield session
+
+
+async def bind_workspace(session: AsyncSession, workspace_id: uuid.UUID) -> None:
+    """Expose the authorized workspace to row-level security for this transaction.
+
+    Tenant tables carry `FORCE ROW LEVEL SECURITY` policies keyed on the
+    `app.workspace_id` setting, so under a non-superuser database role a
+    session that skips this call cannot read or write tenant rows at all.
+    Repository-layer scoping stays mandatory; this is defense in depth.
+    """
+    await session.execute(
+        text("SELECT set_config('app.workspace_id', :workspace_id, true)"),
+        {"workspace_id": str(workspace_id)},
+    )

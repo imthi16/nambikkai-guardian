@@ -60,3 +60,68 @@ def rate_limited() -> HTTPException:
         "rate_limited",
         "Too many attempts; retry later.",
     )
+
+
+def workspace_not_found() -> HTTPException:
+    """Also returned to non-members, so workspace existence is never disclosed."""
+    return _error(
+        status.HTTP_404_NOT_FOUND,
+        "workspace_not_found",
+        "The workspace does not exist or you are not a member.",
+    )
+
+
+def insufficient_role() -> HTTPException:
+    return _error(
+        status.HTTP_403_FORBIDDEN,
+        "insufficient_role",
+        "Your workspace role does not allow this action.",
+    )
+
+
+def cannot_manage_role() -> HTTPException:
+    return _error(
+        status.HTTP_403_FORBIDDEN,
+        "cannot_manage_role",
+        "Your workspace role cannot grant or manage the requested role.",
+    )
+
+
+def user_not_found() -> HTTPException:
+    return _error(
+        status.HTTP_404_NOT_FOUND,
+        "user_not_found",
+        "No account exists for this email.",
+    )
+
+
+def member_not_found() -> HTTPException:
+    return _error(
+        status.HTTP_404_NOT_FOUND,
+        "member_not_found",
+        "This user is not a member of the workspace.",
+    )
+
+
+def member_already_exists() -> HTTPException:
+    return _error(
+        status.HTTP_409_CONFLICT,
+        "member_already_exists",
+        "This user is already a member of the workspace.",
+    )
+
+
+def last_owner() -> HTTPException:
+    return _error(
+        status.HTTP_409_CONFLICT,
+        "last_owner",
+        "A workspace must keep at least one owner.",
+    )
+
+
+def slug_already_exists() -> HTTPException:
+    return _error(
+        status.HTTP_409_CONFLICT,
+        "slug_already_exists",
+        "A workspace with this slug already exists.",
+    )

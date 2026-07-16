@@ -59,6 +59,19 @@ security policies (`FORCE`, keyed on the transaction-local `app.workspace_id` se
 must connect as a non-superuser role; the RLS integration tests verify the policies with a
 dedicated non-superuser probe role.
 
+## Document uploads
+
+`/api/v1/workspaces/{id}/documents` accepts PDF, TXT, Markdown, and DOCX uploads (multipart)
+from members holding the upload capability. Files are validated before a byte reaches object
+storage: sanitized basename, allowed extension, declared MIME matching the extension, and
+content sniffing (PDF/DOCX magic, UTF-8 text without NULs). Size is capped by
+`MAX_UPLOAD_BYTES`, duplicates are detected per workspace by SHA-256, and every upload or
+download-link issuance writes an audit event. Object keys are server-generated; downloads are
+time-limited presigned URLs (`DOWNLOAD_URL_TTL_SECONDS`) against a private bucket. Storage is
+behind the `ObjectStorage` interface (`app/storage/`), implemented for S3/MinIO. Malware
+scanning is not implemented yet — documents stay in `pending` status until the ingestion
+pipeline (issue #6) picks them up; the `quarantined` status is reserved for its scanner.
+
 ## Verification
 
 - `make format` formats Python and web sources.

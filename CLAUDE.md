@@ -102,7 +102,11 @@ Repository layout and intended ownership per directory:
   proves membership (non-members get 404, never 403), applies the role matrix in
   `app/auth/permissions.py`, and calls `bind_workspace` so Postgres row-level security
   (migration `0003`, enforced only for non-superuser DB roles) fences tenant tables under the
-  repository scoping.
+  repository scoping. Document uploads (`app/documents/`, `app/routes/documents.py`) validate
+  filename/extension/declared-MIME/content-magic before any byte reaches storage, dedupe by
+  SHA-256 per workspace, and store via the `ObjectStorage` interface (`app/storage/`,
+  S3/MinIO impl); downloads are presigned URLs. Storage integration tests need the
+  `make infra-up` MinIO and use a separate `nambikkai-test-documents` bucket.
 - `apps/web` — Next.js (App Router) + TypeScript, React 19. Strict TypeScript, strict ESLint
   (`--max-warnings=0`).
 - `services/` — planned boundaries for `ingestion`, `retrieval`, `verification`, `safety`, kept as

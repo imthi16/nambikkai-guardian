@@ -19,6 +19,8 @@ The committed `.env.example` contains non-secret local defaults only.
 | `REFRESH_TOKEN_TTL_SECONDS` | Refresh-token lifetime | `1209600` (14 days) |
 | `AUTH_RATE_LIMIT_ATTEMPTS` | Allowed requests per auth endpoint per window | `10` |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Rate-limit window length | `60` |
+| `MAX_UPLOAD_BYTES` | Document upload size cap | `26214400` (25 MiB) |
+| `DOWNLOAD_URL_TTL_SECONDS` | Presigned download-link lifetime | `300` |
 
 Known local secrets are rejected when `APP_ENV` is `staging` or `production`. Deployed secrets must
 come from a secret manager or protected environment configuration, never a checked-in file. Keep

@@ -14,7 +14,11 @@ The committed `.env.example` contains non-secret local defaults only.
 | `S3_ENDPOINT` | S3-compatible endpoint | Local MinIO |
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Object-storage credentials | Local-only values |
 | `S3_BUCKET` | Private document bucket | `nambikkai-documents` |
-| `JWT_SECRET` | Future token-signing secret | Local-only value |
+| `JWT_SECRET` | HS256 signing secret for access tokens | Local-only value |
+| `ACCESS_TOKEN_TTL_SECONDS` | Access-token lifetime | `900` (15 minutes) |
+| `REFRESH_TOKEN_TTL_SECONDS` | Refresh-token lifetime | `1209600` (14 days) |
+| `AUTH_RATE_LIMIT_ATTEMPTS` | Allowed requests per auth endpoint per window | `10` |
+| `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Rate-limit window length | `60` |
 
 Known local secrets are rejected when `APP_ENV` is `staging` or `production`. Deployed secrets must
 come from a secret manager or protected environment configuration, never a checked-in file. Keep

@@ -93,7 +93,11 @@ Repository layout and intended ownership per directory:
   `WorkspaceScopedRepository`, which filters every query by `workspace_id`. Schema changes require
   an Alembic revision in `infra/migrations/versions/`; the integration test suite runs
   `alembic check` so models and migrations may not drift. API integration tests need the
-  `make infra-up` Postgres (they provision disposable `nambikkai_test` databases).
+  `make infra-up` Postgres (they provision disposable `nambikkai_test` databases). Authentication
+  lives in `app/auth/` (Argon2id passwords, HS256 access JWTs, DB-backed rotating refresh tokens
+  with reuse detection, sliding-window rate limiting) behind `/api/v1/auth`; protected routes take
+  the `CurrentUserDep` dependency, per-app state (`app.state.settings`, `auth_rate_limiter`) is set
+  in `create_app`, and auth errors carry stable `{code, message}` details.
 - `apps/web` — Next.js (App Router) + TypeScript, React 19. Strict TypeScript, strict ESLint
   (`--max-warnings=0`).
 - `services/` — planned boundaries for `ingestion`, `retrieval`, `verification`, `safety`, kept as

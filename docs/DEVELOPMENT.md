@@ -30,6 +30,18 @@ The API integration tests provision disposable `nambikkai_test` and
 `nambikkai_migration_test` databases on the local PostgreSQL instance, so `make test`
 requires `make infra-up` to be running.
 
+## Authentication
+
+The API exposes `/api/v1/auth` endpoints: `register`, `login`, `refresh`, `logout`, and `me`.
+Passwords are hashed with Argon2id. Logins return a short-lived HS256 access token (sign-key
+`JWT_SECRET`) plus an opaque refresh token whose SHA-256 digest is stored in `refresh_tokens`.
+Refreshing rotates the token and revokes the presented one; reusing a revoked token revokes every
+session for that account, and logout revokes a single session. Auth failures use stable error
+codes (`invalid_credentials`, `invalid_refresh_token`, `not_authenticated`,
+`email_already_registered`, `rate_limited`) so clients never parse messages. The credential
+endpoints are rate limited per client IP and path with an in-process sliding window; the limiter
+sits behind an interface and must move to Redis before the API scales past one replica.
+
 ## Verification
 
 - `make format` formats Python and web sources.

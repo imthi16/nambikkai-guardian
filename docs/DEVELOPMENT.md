@@ -21,6 +21,15 @@ Start the API with `make dev-api` and visit `http://127.0.0.1:8000/health` or th
 `/api/v1/health`. In a second terminal, start Next.js with `make dev-web` and visit
 `http://127.0.0.1:3000`.
 
+## Database migrations
+
+Apply schema migrations with `make migrate-up` and revert the latest one with
+`make migrate-down`. After changing models under `apps/api/app/db/models`, generate a
+new revision with `make migrate-new m="describe change"` and review it before committing.
+The API integration tests provision disposable `nambikkai_test` and
+`nambikkai_migration_test` databases on the local PostgreSQL instance, so `make test`
+requires `make infra-up` to be running.
+
 ## Verification
 
 - `make format` formats Python and web sources.

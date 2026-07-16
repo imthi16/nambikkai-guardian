@@ -32,6 +32,10 @@ make infra-logs            # follow postgres/redis/minio logs
 make dev-api               # uvicorn --reload on 127.0.0.1:8000 (health: /health, /api/v1/health)
 make dev-web               # next dev on 127.0.0.1:3000
 
+make migrate-up            # alembic upgrade head (infra/migrations)
+make migrate-down          # revert latest migration
+make migrate-new m="..."   # autogenerate a revision against the running DB
+
 make format                # ruff format + ruff check --fix (api), prettier (web)
 make format-check          # same, check-only
 make lint                  # ruff check (api) + eslint --max-warnings=0 (web)
@@ -83,7 +87,13 @@ Repository layout and intended ownership per directory:
   `app/routes/`. Settings (`app/config.py`) load from process env or the root `.env`, located by
   walking up from the module path to find `AGENTS.md` — do not assume a fixed relative path to the
   env file. `Settings.enforce_deployment_secrets` rejects the checked-in default `JWT_SECRET` /
-  `S3_SECRET_KEY` when `APP_ENV` is `staging` or `production`.
+  `S3_SECRET_KEY` when `APP_ENV` is `staging` or `production`. The database layer lives in
+  `app/db/`: SQLAlchemy 2.0 typed models (`models/`), async engine/session + `session_scope()`
+  (`session.py`), and repositories (`repositories/`) — tenant-owned data must go through
+  `WorkspaceScopedRepository`, which filters every query by `workspace_id`. Schema changes require
+  an Alembic revision in `infra/migrations/versions/`; the integration test suite runs
+  `alembic check` so models and migrations may not drift. API integration tests need the
+  `make infra-up` Postgres (they provision disposable `nambikkai_test` databases).
 - `apps/web` — Next.js (App Router) + TypeScript, React 19. Strict TypeScript, strict ESLint
   (`--max-warnings=0`).
 - `services/` — planned boundaries for `ingestion`, `retrieval`, `verification`, `safety`, kept as

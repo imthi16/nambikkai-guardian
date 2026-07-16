@@ -12,9 +12,11 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.documents import Document, DocumentVersion
+from app.db.models.operations import IngestionJob
 from app.db.repositories.audit import AuditLogRepository
 from app.db.repositories.documents import DocumentRepository, DocumentVersionRepository
 from app.documents.validation import UploadRejectedError, validate_upload
+from app.ingestion.queue import JobMessage, JobQueue
 from app.storage.base import ObjectStorage
 
 
@@ -39,6 +41,7 @@ async def store_new_document(
     *,
     session: AsyncSession,
     storage: ObjectStorage,
+    queue: JobQueue,
     workspace_id: uuid.UUID,
     uploader_id: uuid.UUID,
     raw_filename: str | None,
@@ -95,6 +98,13 @@ async def store_new_document(
             "mime_type": validated.canonical_mime,
         },
     )
+    job = IngestionJob(workspace_id=workspace_id, document_id=document.id)
+    session.add(job)
+    await session.flush()
+    # A worker may dequeue before this transaction commits; it will find no
+    # row, drop the message, and `requeue_stale` re-enqueues the job later.
+    # Duplicate delivery is safe because claiming is a compare-and-set.
+    await queue.enqueue(JobMessage(job_id=job.id, workspace_id=workspace_id))
     return document
 
 

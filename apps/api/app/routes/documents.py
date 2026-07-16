@@ -18,13 +18,19 @@ from app.auth.workspace import RequireAction, WorkspaceContext
 from app.config import Settings
 from app.db.repositories.audit import AuditLogRepository
 from app.db.repositories.documents import DocumentRepository, DocumentVersionRepository
+from app.db.repositories.ingestion import IngestionJobRepository
 from app.documents.service import (
     DuplicateDocumentError,
     FileTooLargeError,
     UploadRejectedError,
     store_new_document,
 )
-from app.schemas.documents import DocumentResponse, DownloadLinkResponse
+from app.ingestion.queue import JobQueue
+from app.schemas.documents import (
+    DocumentProgressResponse,
+    DocumentResponse,
+    DownloadLinkResponse,
+)
 from app.storage.base import ObjectStorage
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/documents", tags=["documents"])
@@ -41,7 +47,13 @@ def get_object_storage(request: Request) -> ObjectStorage:
     return storage
 
 
+def get_job_queue(request: Request) -> JobQueue:
+    queue: JobQueue = request.app.state.job_queue
+    return queue
+
+
 StorageDep = Annotated[ObjectStorage, Depends(get_object_storage)]
+QueueDep = Annotated[JobQueue, Depends(get_job_queue)]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
@@ -51,6 +63,7 @@ async def upload_document(
     context: UploaderContext,
     session: SessionDep,
     storage: StorageDep,
+    queue: QueueDep,
     settings: SettingsDep,
     title: str | None = None,
 ) -> DocumentResponse:
@@ -61,6 +74,7 @@ async def upload_document(
         document = await store_new_document(
             session=session,
             storage=storage,
+            queue=queue,
             workspace_id=context.workspace.id,
             uploader_id=context.user.id,
             raw_filename=file.filename,
@@ -94,6 +108,29 @@ async def get_document(
     if document is None:
         raise errors.document_not_found()
     return DocumentResponse.model_validate(document)
+
+
+@router.get("/{document_id}/status", response_model=DocumentProgressResponse)
+async def document_progress(
+    document_id: uuid.UUID,
+    context: ViewerContext,
+    session: SessionDep,
+) -> DocumentProgressResponse:
+    document = await DocumentRepository(session, context.workspace.id).get(document_id)
+    if document is None:
+        raise errors.document_not_found()
+    job = await IngestionJobRepository(session, context.workspace.id).get_latest_for_document(
+        document.id
+    )
+    return DocumentProgressResponse(
+        document_id=document.id,
+        status=document.status,
+        job_status=job.status if job else None,
+        stage=job.stage if job else None,
+        attempts=job.attempts if job else 0,
+        error=job.error if job else None,
+        updated_at=job.updated_at if job else document.updated_at,
+    )
 
 
 @router.get("/{document_id}/download", response_model=DownloadLinkResponse)

@@ -62,7 +62,8 @@ audit: ## Audit installed Python and locked npm dependencies.
 check: format-check lint typecheck test build compose-config ## Run the primary local quality suite.
 
 infra-up: ## Start PostgreSQL, Redis, MinIO, and bucket initialization.
-	docker compose up -d --wait postgres redis minio minio-create-bucket
+	docker compose up -d --wait postgres redis minio
+	docker compose run --rm --no-deps minio-create-bucket
 
 infra-down: ## Stop local infrastructure without deleting persistent data.
 	docker compose down

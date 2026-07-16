@@ -68,9 +68,23 @@ content sniffing (PDF/DOCX magic, UTF-8 text without NULs). Size is capped by
 `MAX_UPLOAD_BYTES`, duplicates are detected per workspace by SHA-256, and every upload or
 download-link issuance writes an audit event. Object keys are server-generated; downloads are
 time-limited presigned URLs (`DOWNLOAD_URL_TTL_SECONDS`) against a private bucket. Storage is
-behind the `ObjectStorage` interface (`app/storage/`), implemented for S3/MinIO. Malware
-scanning is not implemented yet — documents stay in `pending` status until the ingestion
-pipeline (issue #6) picks them up; the `quarantined` status is reserved for its scanner.
+behind the `ObjectStorage` interface (`app/storage/`), implemented for S3/MinIO.
+
+## Ingestion pipeline
+
+Uploads enqueue an ingestion job on a Redis list (`make dev-worker` runs the consumer). The
+database is the source of truth — the queue only carries `{job_id, workspace_id}` pointers, so
+duplicate delivery is safe: claiming a job is a compare-and-set and terminal states are never
+reprocessed. The worker walks the stages `uploaded → validating → scanning → parsing → ocr →
+normalizing → chunking → embedding → indexing → ready`, committing each transition so
+`GET .../documents/{id}/status` shows live progress. Validating re-downloads the object,
+re-checks its SHA-256 and content magic; scanning uses the `MalwareScanner` interface (the
+default engine only recognizes the EICAR test signature — a placeholder, not protection) and
+quarantines on a hit without retrying. Parsing through indexing are placeholders until issues
+#7–#10 land. Transient failures retry up to `INGESTION_MAX_ATTEMPTS`, then dead-letter;
+`requeue_stale` recovers jobs whose worker crashed (stale `running`) or whose enqueue was lost
+(stale `queued`). Workers bind row-level security per job from the queue message; the
+cross-workspace recovery scan means a deployed worker role needs `BYPASSRLS`.
 
 ## Verification
 

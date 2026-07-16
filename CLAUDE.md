@@ -106,7 +106,13 @@ Repository layout and intended ownership per directory:
   filename/extension/declared-MIME/content-magic before any byte reaches storage, dedupe by
   SHA-256 per workspace, and store via the `ObjectStorage` interface (`app/storage/`,
   S3/MinIO impl); downloads are presigned URLs. Storage integration tests need the
-  `make infra-up` MinIO and use a separate `nambikkai-test-documents` bucket.
+  `make infra-up` MinIO and use a separate `nambikkai-test-documents` bucket. Ingestion
+  (`app/ingestion/`): uploads enqueue `{job_id, workspace_id}` on a Redis list; the worker
+  (`make dev-worker`, `python -m app.ingestion.worker`) claims jobs by compare-and-set (duplicate
+  delivery safe), walks stage enums committed per transition, retries transient failures, and
+  dead-letters after `INGESTION_MAX_ATTEMPTS`; quarantine (EICAR placeholder scanner) and
+  integrity failures never retry. Worker tests use a dedicated committed DB
+  (`nambikkai_worker_test`), not the rolled-back `db_session`.
 - `apps/web` — Next.js (App Router) + TypeScript, React 19. Strict TypeScript, strict ESLint
   (`--max-warnings=0`).
 - `services/` — planned boundaries for `ingestion`, `retrieval`, `verification`, `safety`, kept as

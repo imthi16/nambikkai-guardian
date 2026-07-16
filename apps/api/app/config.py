@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     s3_secret_key: SecretStr = SecretStr("minio123")
     s3_bucket: str = "nambikkai-documents"
     jwt_secret: SecretStr = SecretStr("development-only-change-me")
+    access_token_ttl_seconds: int = 900
+    refresh_token_ttl_seconds: int = 14 * 24 * 3600
+    auth_rate_limit_attempts: int = 10
+    auth_rate_limit_window_seconds: int = 60
 
     @model_validator(mode="after")
     def enforce_deployment_secrets(self) -> Self:

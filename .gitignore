@@ -22,7 +22,7 @@ coverage-summary.json
 .idea/
 .vscode/
 *.log
-storage/
+/storage/
 /models/
 /artifacts/
 .envrc

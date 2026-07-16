@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 
 from app.api.v1.router import api_v1_router
+from app.auth.rate_limit import SlidingWindowRateLimiter
 from app.config import Settings, get_settings
 from app.routes.health import router as health_router
 
@@ -17,6 +18,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/docs" if resolved_settings.api_docs_enabled else None,
         redoc_url="/redoc" if resolved_settings.api_docs_enabled else None,
         openapi_url="/openapi.json" if resolved_settings.api_docs_enabled else None,
+    )
+    application.state.settings = resolved_settings
+    application.state.auth_rate_limiter = SlidingWindowRateLimiter(
+        attempts=resolved_settings.auth_rate_limit_attempts,
+        window_seconds=resolved_settings.auth_rate_limit_window_seconds,
     )
     application.include_router(health_router)
     application.include_router(api_v1_router, prefix="/api/v1")

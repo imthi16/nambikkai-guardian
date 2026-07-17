@@ -29,7 +29,9 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.db.models.documents import Document, DocumentVersion, Page
+from app.chunking.chunker import PageInput, chunk_pages
+from app.chunking.provenance import ProvenanceError, validate_chunk_provenance
+from app.db.models.documents import Chunk, Document, DocumentVersion, Page
 from app.db.models.enums import DocumentStatus, IngestionStage, IngestionStatus
 from app.db.models.operations import IngestionJob
 from app.db.repositories.audit import AuditLogRepository
@@ -47,11 +49,10 @@ logger = logging.getLogger("app.ingestion")
 
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
-# Stages after OCR are placeholders until their features land
-# (#8 chunking, #9 normalization, #10 embeddings).
+# Stages after chunking are placeholders until their features land
+# (#9 normalization, #10 embeddings/indexing).
 _PLACEHOLDER_STAGES = (
     IngestionStage.NORMALIZING,
-    IngestionStage.CHUNKING,
     IngestionStage.EMBEDDING,
     IngestionStage.INDEXING,
 )
@@ -90,6 +91,8 @@ class IngestionWorker:
         scanner: MalwareScanner,
         ocr_engine: OcrEngine | None = None,
         store_page_images: bool = True,
+        chunk_max_chars: int = 1200,
+        chunk_overlap_chars: int = 150,
         max_attempts: int = 3,
         stale_after_seconds: int = 300,
     ) -> None:
@@ -99,6 +102,8 @@ class IngestionWorker:
         self._scanner = scanner
         self._ocr_engine = ocr_engine or NullOcrEngine()
         self._store_page_images = store_page_images
+        self._chunk_max_chars = chunk_max_chars
+        self._chunk_overlap_chars = chunk_overlap_chars
         self._max_attempts = max_attempts
         self._stale_after = timedelta(seconds=stale_after_seconds)
 
@@ -156,6 +161,7 @@ class IngestionWorker:
         await self._stage_scan(message, content)
         parsed = await self._stage_parse(message, content)
         await self._stage_ocr(message, content, parsed)
+        await self._stage_chunk(message, content, parsed)
         for stage in _PLACEHOLDER_STAGES:
             await self._advance_stage(message, stage)
             logger.info(
@@ -314,6 +320,65 @@ class IngestionWorker:
             if version is not None:
                 version.page_count = len(parsed.pages)
 
+    async def _stage_chunk(
+        self,
+        message: JobMessage,
+        content: _LoadedContent,
+        parsed: ParsedDocument,
+    ) -> None:
+        """Chunk parsed pages and persist only provenance-validated chunks."""
+        await self._advance_stage(message, IngestionStage.CHUNKING)
+        page_inputs = [
+            PageInput(
+                page_number=page.page_number,
+                text=page.text,
+                ocr_engine=page.ocr_engine,
+                ocr_confidence=page.ocr_confidence,
+            )
+            for page in parsed.pages
+        ]
+        drafts = chunk_pages(
+            page_inputs,
+            max_chars=self._chunk_max_chars,
+            overlap=self._chunk_overlap_chars,
+        )
+        texts_by_page = {page.page_number: page.text for page in page_inputs}
+        try:
+            for draft in drafts:
+                validate_chunk_provenance(draft, texts_by_page[draft.page_number])
+        except ProvenanceError as error:
+            # A provenance failure is a chunker bug, not bad input; never
+            # persist anything from this run.
+            raise PermanentIngestionError(f"chunk provenance invalid: {error}") from error
+
+        async with session_scope(self._factory) as session:
+            await bind_workspace(session, message.workspace_id)
+            await session.execute(
+                delete(Chunk).where(Chunk.document_version_id == content.version_id)
+            )
+            for index, draft in enumerate(drafts):
+                session.add(
+                    Chunk(
+                        workspace_id=message.workspace_id,
+                        document_version_id=content.version_id,
+                        chunk_index=index,
+                        content=draft.content,
+                        content_hash=draft.content_hash,
+                        token_count=draft.token_count,
+                        page_number=draft.page_number,
+                        section=draft.section,
+                        char_start=draft.char_start,
+                        char_end=draft.char_end,
+                        language=draft.language,
+                        ocr_engine=draft.ocr_engine,
+                        ocr_confidence=draft.ocr_confidence,
+                    )
+                )
+        logger.info(
+            "chunked document",
+            extra={"job_id": str(message.job_id), "chunks": len(drafts)},
+        )
+
     async def _finish(self, message: JobMessage) -> None:
         async with session_scope(self._factory) as session:
             await bind_workspace(session, message.workspace_id)
@@ -458,6 +523,8 @@ def _main() -> None:
         scanner=SignatureScanner(),
         ocr_engine=build_ocr_engine(settings.ocr_engine, settings.ocr_languages),
         store_page_images=settings.ingestion_store_page_images,
+        chunk_max_chars=settings.chunk_max_chars,
+        chunk_overlap_chars=settings.chunk_overlap_chars,
         max_attempts=settings.ingestion_max_attempts,
         stale_after_seconds=settings.ingestion_stale_after_seconds,
     )

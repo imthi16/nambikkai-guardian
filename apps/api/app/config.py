@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     ingestion_store_page_images: bool = True
     ocr_engine: Literal["none", "tesseract"] = "none"
     ocr_languages: str = "tam+eng"
+    chunk_max_chars: int = 1200
+    chunk_overlap_chars: int = 150
 
     @model_validator(mode="after")
     def enforce_deployment_secrets(self) -> Self:

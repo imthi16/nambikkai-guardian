@@ -168,6 +168,10 @@ class GroundedAnswer:
     claims: tuple[AtomicClaim, ...]
     confidence: float
     abstention_reason: str | None = None
+    # The calibrated 5-way operational decision (answer / answer_with_warning /
+    # ask_for_clarification / abstain / escalate_for_review) and its rationale.
+    decision: str = "abstain"
+    decision_reason: str = ""
 
     @property
     def citations(self) -> tuple[Citation, ...]:
@@ -191,8 +195,13 @@ class RagTrace:
     sufficient: bool = False
     draft_claim_count: int = 0
     supported_claim_count: int = 0
+    partial_claim_count: int = 0
+    contradicted_claim_count: int = 0
+    unsupported_claim_count: int = 0
     dropped_claim_count: int = 0
     outcome: str = AnswerOutcome.ABSTAINED.value
+    decision: str = "abstain"
+    decision_reason: str = ""
     confidence: float = 0.0
     abstained: bool = True
     abstention_reason: str | None = None
@@ -214,8 +223,13 @@ class RagTrace:
             "sufficient": self.sufficient,
             "draft_claim_count": self.draft_claim_count,
             "supported_claim_count": self.supported_claim_count,
+            "partial_claim_count": self.partial_claim_count,
+            "contradicted_claim_count": self.contradicted_claim_count,
+            "unsupported_claim_count": self.unsupported_claim_count,
             "dropped_claim_count": self.dropped_claim_count,
             "outcome": self.outcome,
+            "decision": self.decision,
+            "decision_reason": self.decision_reason,
             "confidence": round(self.confidence, 4),
             "abstained": self.abstained,
             "abstention_reason": self.abstention_reason,

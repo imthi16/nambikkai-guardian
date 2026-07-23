@@ -62,6 +62,19 @@ class VerificationConfig:
     min_confidence: float = 0.3
 
 
+@dataclass(frozen=True)
+class VerificationOutcome:
+    """Supported claims plus the count of every verdict assigned to a candidate.
+
+    ``counts`` tallies each candidate that was assessed against its cited chunk
+    (candidates citing an unknown chunk are excluded), keyed by verdict — the
+    decision policy reads it to react to contradictions and dropped claims.
+    """
+
+    claims: list[AtomicClaim]
+    counts: dict[ClaimVerdict, int]
+
+
 class ClaimVerifier:
     """Verifies candidate claims against authorized evidence and scores them."""
 
@@ -82,10 +95,26 @@ class ClaimVerifier:
         candidates: Sequence[CandidateClaim],
         evidence: Sequence[EvidencePassage],
     ) -> list[AtomicClaim]:
+        """Return only the supported claims (see :meth:`verify_verbose`)."""
+        return self.verify_verbose(query, candidates, evidence).claims
+
+    def verify_verbose(
+        self,
+        query: str,
+        candidates: Sequence[CandidateClaim],
+        evidence: Sequence[EvidencePassage],
+    ) -> VerificationOutcome:
+        """Verify every candidate, returning supported claims *and* verdict tallies.
+
+        The per-verdict counts let the downstream decision policy react to
+        contradictions and dropped claims. Candidates citing an unknown chunk
+        are dropped without a verdict — they were never verifiable evidence.
+        """
         by_chunk = {passage.chunk_id: passage for passage in evidence}
         query_tokens = self._tokens(query)
 
         verified: list[AtomicClaim] = []
+        counts: dict[ClaimVerdict, int] = dict.fromkeys(ClaimVerdict, 0)
         index = 0
         for candidate in candidates:
             passage = by_chunk.get(candidate.chunk_id)
@@ -94,6 +123,7 @@ class ClaimVerifier:
                 # is never allowed; drop it rather than fabricate provenance.
                 continue
             verdict, confidence, explanation = self._assess(query_tokens, candidate, passage)
+            counts[verdict] += 1
             if verdict is not ClaimVerdict.SUPPORTED:
                 # Contradicted, unsupported, and partially-supported claims are
                 # never surfaced; the graph abstains if none survive.
@@ -109,7 +139,7 @@ class ClaimVerifier:
                 )
             )
             index += 1
-        return verified
+        return VerificationOutcome(claims=verified, counts=counts)
 
     def _assess(
         self,

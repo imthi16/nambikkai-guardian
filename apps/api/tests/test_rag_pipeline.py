@@ -73,6 +73,19 @@ class FakeRetriever:
         return self._passages, {"returned_count": len(self._passages)}
 
 
+class FixedGenerator:
+    """Emits a fixed list of candidate claims regardless of the query."""
+
+    model = "fixed-test"
+    model_version = "v1"
+
+    def __init__(self, candidates: Sequence[CandidateClaim]) -> None:
+        self._candidates = tuple(candidates)
+
+    def generate(self, query: str, evidence: Sequence[EvidencePassage]) -> Sequence[CandidateClaim]:
+        return self._candidates
+
+
 def _state(query: str = "invoice payment due date", top_k: int = 8) -> RagState:
     return RagState(
         workspace_id=WORKSPACE,
@@ -98,6 +111,48 @@ async def test_answers_from_evidence_with_exact_citation() -> None:
     assert claim.citation.quote in cited.content
     assert claim.citation.page_number == cited.page_number
     assert terminal.confidence > 0.0
+    assert terminal.decision in {"answer", "answer_with_warning"}
+
+
+async def test_escalates_and_abstains_when_support_and_contradiction_coexist() -> None:
+    """A supported claim beside a contradicted one is withheld for review."""
+    content = "invoice payment is due within thirty days. refunds take five days."
+    passage = _passage(content, 0)
+    supported_quote = "invoice payment is due within thirty days"
+    contradicted_quote = "refunds take five days"
+    s_start = content.index(supported_quote)
+    c_start = content.index(contradicted_quote)
+    generator = FixedGenerator(
+        [
+            CandidateClaim(
+                chunk_id=passage.chunk_id,
+                text=supported_quote,
+                quote=supported_quote,
+                quote_char_start=s_start,
+                quote_char_end=s_start + len(supported_quote),
+            ),
+            CandidateClaim(
+                chunk_id=passage.chunk_id,
+                # Quote is verbatim, but the asserted number contradicts it.
+                text="refunds take ten days",
+                quote=contradicted_quote,
+                quote_char_start=c_start,
+                quote_char_end=c_start + len(contradicted_quote),
+            ),
+        ]
+    )
+    graph = RagGraph(FakeRetriever([passage]), generator=generator, config=RagConfig())
+    terminal = await graph.run(_state())
+
+    assert terminal.outcome is AnswerOutcome.ABSTAINED
+    assert terminal.decision == "escalate_for_review"
+    assert terminal.trace.contradicted_claim_count == 1
+    assert terminal.trace.supported_claim_count == 1
+    # A withheld answer must not still expose the verified claim/citation.
+    assert terminal.claims == ()
+    # abstention_reason is a stable code; decision_reason carries the prose.
+    assert terminal.abstention_reason == "escalate_for_review"
+    assert terminal.decision_reason
 
 
 async def test_abstains_on_empty_evidence() -> None:
@@ -108,6 +163,9 @@ async def test_abstains_on_empty_evidence() -> None:
     assert terminal.claims == ()
     assert terminal.confidence == 0.0
     assert terminal.abstention_reason == "insufficient_evidence"
+    # The rationale is populated even though the decision node never ran.
+    assert terminal.decision == "abstain"
+    assert terminal.decision_reason == "insufficient_evidence"
 
 
 async def test_abstains_when_evidence_below_sufficiency_threshold() -> None:

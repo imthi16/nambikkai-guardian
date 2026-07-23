@@ -27,11 +27,12 @@ from typing import Protocol, runtime_checkable
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from app.decision import ConfidencePolicy, DecisionOutcome, DecisionSignals, get_default_policy
 from app.language import detect_language
 from app.rag.config import RagConfig
 from app.rag.generation import AnswerGenerator, get_default_generator
 from app.rag.state import RagState
-from app.rag.types import AnswerOutcome, EvidencePassage
+from app.rag.types import AnswerOutcome, ClaimVerdict, EvidencePassage
 from app.rag.verification import ClaimVerifier
 
 
@@ -65,11 +66,13 @@ class RagGraph:
         *,
         generator: AnswerGenerator | None = None,
         verifier: ClaimVerifier | None = None,
+        policy: ConfidencePolicy | None = None,
         config: RagConfig | None = None,
     ) -> None:
         self._retriever = retriever
         self._generator = generator or get_default_generator()
         self._verifier = verifier or ClaimVerifier()
+        self._policy = policy or get_default_policy()
         self._config = config or RagConfig()
         self._compiled = self._build()
 
@@ -89,6 +92,7 @@ class RagGraph:
         graph.add_node("retrieve", self._retrieve)
         graph.add_node("generate", self._generate)
         graph.add_node("verify", self._verify)
+        graph.add_node("decide", self._decide)
         graph.add_node("compose", self._compose)
         graph.add_node("abstain", self._abstain)
 
@@ -107,10 +111,12 @@ class RagGraph:
             {"generate": "generate", "abstain": "abstain"},
         )
         graph.add_edge("generate", "verify")
-        # Support gate: abstain when no claim survived verification.
+        graph.add_edge("verify", "decide")
+        # Decision gate: the calibrated policy chooses whether to surface an
+        # answer at all; only its answering outcomes reach composition.
         graph.add_conditional_edges(
-            "verify",
-            self._route_supported,
+            "decide",
+            self._route_decision,
             {"compose": "compose", "abstain": "abstain"},
         )
         graph.add_edge("compose", END)
@@ -128,8 +134,8 @@ class RagGraph:
         return "generate" if state.sufficient else "abstain"
 
     @staticmethod
-    def _route_supported(state: RagState) -> str:
-        return "compose" if state.claims else "abstain"
+    def _route_decision(state: RagState) -> str:
+        return "compose" if DecisionOutcome(state.decision).is_answering else "abstain"
 
     # --- nodes --------------------------------------------------------------
 
@@ -195,12 +201,61 @@ class RagGraph:
     async def _verify(self, state: RagState) -> dict[str, object]:
         """Verify each candidate against its cited evidence; drop unsupported."""
         start = time.perf_counter()
-        claims = tuple(self._verifier.verify(state.query, state.candidates, state.evidence))
-        state.trace.verification_ms = (time.perf_counter() - start) * 1000
-        state.trace.verifier = self._verifier.verifier
-        state.trace.supported_claim_count = len(claims)
-        state.trace.dropped_claim_count = len(state.candidates) - len(claims)
-        return {"claims": claims, "trace": state.trace}
+        outcome = self._verifier.verify_verbose(state.query, state.candidates, state.evidence)
+        claims = tuple(outcome.claims)
+        counts = outcome.counts
+        trace = state.trace
+        trace.verification_ms = (time.perf_counter() - start) * 1000
+        trace.verifier = self._verifier.verifier
+        trace.supported_claim_count = len(claims)
+        trace.partial_claim_count = counts.get(ClaimVerdict.AMBIGUOUS, 0)
+        trace.contradicted_claim_count = counts.get(ClaimVerdict.CONTRADICTED, 0)
+        trace.unsupported_claim_count = counts.get(ClaimVerdict.UNSUPPORTED, 0)
+        trace.dropped_claim_count = len(state.candidates) - len(claims)
+        return {"claims": claims, "trace": trace}
+
+    async def _decide(self, state: RagState) -> dict[str, object]:
+        """Calibrate the operational decision from objective signals.
+
+        Aggregates the verifier's per-verdict counts, the mean supported-claim
+        confidence, evidence coverage, and the least reliable cited OCR source,
+        then asks the policy for one of five outcomes. A model's self-reported
+        confidence is never consulted.
+        """
+        claims = state.claims
+        trace = state.trace
+        confidence = sum(claim.confidence for claim in claims) / len(claims) if claims else None
+        # Recorded OCR confidences among cited evidence, and whether any cited
+        # chunk is OCR-derived with *no* recorded confidence (unknown quality,
+        # which must not be mistaken for born-digital reliability).
+        ocr_values = [
+            claim.citation.ocr_confidence
+            for claim in claims
+            if claim.citation.ocr_engine and claim.citation.ocr_confidence is not None
+        ]
+        ocr_unknown = any(
+            claim.citation.ocr_engine and claim.citation.ocr_confidence is None for claim in claims
+        )
+        signals = DecisionSignals(
+            supported_claims=len(claims),
+            partial_claims=trace.partial_claim_count,
+            contradicted_claims=trace.contradicted_claim_count,
+            unsupported_claims=trace.unsupported_claim_count,
+            evidence_count=trace.evidence_count,
+            retrieved_count=trace.retrieved_count,
+            dropped_claims=trace.dropped_claim_count,
+            verifier_confidence=confidence,
+            min_ocr_confidence=min(ocr_values) if ocr_values else None,
+            ocr_unknown_reliability=ocr_unknown,
+        )
+        result = self._policy.decide(signals)
+        trace.decision = result.outcome.value
+        trace.decision_reason = result.reason
+        return {
+            "decision": result.outcome.value,
+            "decision_reason": result.reason,
+            "trace": trace,
+        }
 
     async def _compose(self, state: RagState) -> dict[str, object]:
         """Assemble the answer from supported claims only.
@@ -230,25 +285,42 @@ class RagGraph:
         }
 
     async def _abstain(self, state: RagState) -> dict[str, object]:
-        """Return the fixed refusal, recording *why* only in the trace."""
+        """Return the fixed refusal, clearing any claims and recording *why*.
+
+        Claims are cleared here even if verification populated them: when the
+        decision gate withholds an answer (e.g. support and contradiction
+        coexist), the response must not still expose assertions the gate
+        intended to suppress. ``abstention_reason`` stays a stable machine code;
+        the human-readable rationale lives in ``decision_reason``, populated on
+        the early gates too so it is never empty.
+        """
         reason = self._abstention_reason(state)
+        decision_reason = state.decision_reason or reason
         trace = state.trace
         trace.outcome = AnswerOutcome.ABSTAINED.value
         trace.abstained = True
         trace.abstention_reason = reason
+        trace.decision = state.decision
+        trace.decision_reason = decision_reason
         trace.confidence = 0.0
         return {
             "outcome": AnswerOutcome.ABSTAINED,
             "answer_text": self._config.abstention_text,
             "confidence": 0.0,
             "abstention_reason": reason,
+            "decision": state.decision,
+            "decision_reason": decision_reason,
+            "claims": (),
             "trace": trace,
         }
 
     @staticmethod
     def _abstention_reason(state: RagState) -> str:
+        """A stable machine code for *why* the pipeline withheld an answer."""
         if not state.authorized:
             return "unauthorized"
         if not state.sufficient:
             return "insufficient_evidence"
-        return "no_supported_claims"
+        # Reached the decision gate: the 5-way decision value is itself a stable
+        # code (ask_for_clarification / escalate_for_review / abstain).
+        return state.decision

@@ -64,6 +64,9 @@ class AnswerResponse(BaseModel):
     confidence: float
     abstained: bool
     abstention_reason: str | None
+    # The calibrated 5-way operational decision and its rationale.
+    decision: str
+    decision_reason: str
     claims: list[ClaimResponse]
     trace: dict[str, object]
 
@@ -76,6 +79,8 @@ class AnswerResponse(BaseModel):
             confidence=answer.confidence,
             abstained=answer.outcome.value == "abstained",
             abstention_reason=answer.abstention_reason,
+            decision=answer.decision,
+            decision_reason=answer.decision_reason,
             claims=[
                 ClaimResponse(
                     index=claim.index,

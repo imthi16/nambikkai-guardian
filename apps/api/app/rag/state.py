@@ -67,6 +67,9 @@ class RagState(BaseModel):
     answer_text: str = ""
     confidence: float = 0.0
     abstention_reason: str | None = None
+    # The calibrated 5-way operational decision and its rationale.
+    decision: str = "abstain"
+    decision_reason: str = ""
 
     # --- telemetry (never carries query or evidence text) ---
     trace: RagTrace
@@ -79,6 +82,8 @@ class RagState(BaseModel):
             claims=self.claims,
             confidence=self.confidence,
             abstention_reason=self.abstention_reason,
+            decision=self.decision,
+            decision_reason=self.decision_reason,
         )
 
 

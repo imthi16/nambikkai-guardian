@@ -29,6 +29,11 @@ The committed `.env.example` contains non-secret local defaults only.
 | `OCR_LANGUAGES` | Tesseract language codes | `tam+eng` |
 | `CHUNK_MAX_CHARS` | Maximum characters per chunk | `1200` |
 | `CHUNK_OVERLAP_CHARS` | Context shared between neighboring chunks | `150` |
+| `EMBEDDING_PROVIDER` | Embedding backend (`local`) | `local` |
+| `EMBEDDING_MODEL`, `EMBEDDING_MODEL_VERSION` | Provider provenance stored on every vector | `bge-m3-local`, `hashing-v1` |
+| `EMBEDDING_DIMENSIONS` | Vector width; must match the `chunk_embeddings` column | `1024` |
+| `EMBEDDING_BATCH_SIZE` | Inputs per provider call | `32` |
+| `EMBEDDING_MAX_ATTEMPTS`, `EMBEDDING_BACKOFF_SECONDS` | Retry budget for transient provider errors | `3`, `0.5` |
 
 Known local secrets are rejected when `APP_ENV` is `staging` or `production`. Deployed secrets must
 come from a secret manager or protected environment configuration, never a checked-in file. Keep

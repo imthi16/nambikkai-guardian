@@ -25,7 +25,7 @@ from tests.integration.dbtools import alembic, provision_database, scalar
 RLS_DB = "attest_rls_test"
 PROBE_ROLE = "attest_rls_probe"
 PROBE_PASSWORD = "rls-probe-only"  # noqa: S105 - throwaway local test role
-TENANT_TABLES = ("documents", "chunks", "conversations", "ingestion_jobs")
+TENANT_TABLES = ("documents", "chunks", "chunk_embeddings", "conversations", "ingestion_jobs")
 
 
 @dataclass(frozen=True)

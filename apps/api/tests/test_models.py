@@ -5,6 +5,7 @@ from app.db.base import Base
 
 EXPECTED_TABLES = {
     "audit_logs",
+    "chunk_embeddings",
     "chunks",
     "citations",
     "conversations",
@@ -20,7 +21,13 @@ EXPECTED_TABLES = {
     "workspaces",
 }
 
-WORKSPACE_OWNED_TABLES = {"chunks", "conversations", "documents", "ingestion_jobs"}
+WORKSPACE_OWNED_TABLES = {
+    "chunk_embeddings",
+    "chunks",
+    "conversations",
+    "documents",
+    "ingestion_jobs",
+}
 
 
 def test_all_initial_tables_are_registered() -> None:

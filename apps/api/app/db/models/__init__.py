@@ -1,7 +1,7 @@
 """All ORM models; importing this package registers every table on the Base metadata."""
 
 from app.db.models.conversations import Citation, Conversation, Message, VerificationResult
-from app.db.models.documents import Chunk, Document, DocumentVersion, Page
+from app.db.models.documents import Chunk, ChunkEmbedding, Document, DocumentVersion, Page
 from app.db.models.enums import (
     AnswerStatus,
     ClaimVerdict,
@@ -17,6 +17,7 @@ __all__ = [
     "AnswerStatus",
     "AuditLog",
     "Chunk",
+    "ChunkEmbedding",
     "Citation",
     "ClaimVerdict",
     "Conversation",

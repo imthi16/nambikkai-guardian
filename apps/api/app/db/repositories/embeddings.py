@@ -15,7 +15,8 @@ from dataclasses import dataclass
 
 from sqlalchemy import delete, select
 
-from app.db.models.documents import Chunk, ChunkEmbedding, DocumentVersion
+from app.db.models.documents import Chunk, ChunkEmbedding, Document, DocumentVersion
+from app.db.models.enums import DocumentStatus
 from app.db.repositories.base import WorkspaceScopedRepository
 from app.embeddings.types import EmbeddingVector
 
@@ -114,6 +115,19 @@ class ChunkEmbeddingRepository(WorkspaceScopedRepository[ChunkEmbedding]):
             ChunkEmbedding.model == query.model,
             ChunkEmbedding.model_version == query.model_version,
         ]
+        # Only READY documents are retrievable: a quarantined or failed document
+        # must never contribute evidence. This mirrors the lexical retriever's
+        # gate so both sides of the fusion draw from the same authorized,
+        # non-quarantined candidate set.
+        ready_versions = (
+            select(DocumentVersion.id)
+            .join(Document, DocumentVersion.document_id == Document.id)
+            .where(Document.status == DocumentStatus.READY)
+        )
+        ready_chunks = select(Chunk.id).where(
+            Chunk.id == ChunkEmbedding.chunk_id,
+            Chunk.document_version_id.in_(ready_versions),
+        )
         if document_id is not None or language is not None:
             chunk_filter = [Chunk.id == ChunkEmbedding.chunk_id]
             if document_id is not None:
@@ -125,6 +139,7 @@ class ChunkEmbeddingRepository(WorkspaceScopedRepository[ChunkEmbedding]):
             if language is not None:
                 chunk_filter.append(Chunk.language == language)
             conditions.append(select(Chunk.id).where(*chunk_filter).exists())
+        conditions.append(ready_chunks.exists())
 
         statement = (
             select(ChunkEmbedding.chunk_id, distance.label("distance"))

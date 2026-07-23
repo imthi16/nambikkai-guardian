@@ -43,6 +43,10 @@ from app.parsing.ocr import NullOcrEngine, OcrEngine
 from app.parsing.pdf import parse_pdf, render_pdf_page_png
 from app.parsing.text import parse_docx, parse_text
 from app.parsing.types import ParsedDocument, ParserError
+from app.safety.detector import InjectionDetector
+from app.safety.scanner import DocumentSafetyReport, InjectionScanner
+from app.safety.types import InjectionPolicyConfig
+from app.security.events import log_security_event
 from app.storage.base import ObjectStorage
 
 logger = logging.getLogger("app.ingestion")
@@ -90,6 +94,8 @@ class IngestionWorker:
         queue: JobQueue,
         scanner: MalwareScanner,
         ocr_engine: OcrEngine | None = None,
+        injection_scanner: InjectionScanner | None = None,
+        scan_injection: bool = True,
         store_page_images: bool = True,
         chunk_max_chars: int = 1200,
         chunk_overlap_chars: int = 150,
@@ -101,6 +107,8 @@ class IngestionWorker:
         self._queue = queue
         self._scanner = scanner
         self._ocr_engine = ocr_engine or NullOcrEngine()
+        self._injection_scanner = injection_scanner or InjectionScanner()
+        self._scan_injection = scan_injection
         self._store_page_images = store_page_images
         self._chunk_max_chars = chunk_max_chars
         self._chunk_overlap_chars = chunk_overlap_chars
@@ -351,6 +359,27 @@ class IngestionWorker:
             # persist anything from this run.
             raise PermanentIngestionError(f"chunk provenance invalid: {error}") from error
 
+        # Prompt-injection scan: treat chunk text as untrusted data and detect
+        # instruction-like passages *before* anything is persisted, so poisoned
+        # content never reaches the chunks table (and thus never retrieval or
+        # generation). A quarantine verdict aborts the stage via the shared
+        # quarantine path, leaving no chunk rows behind.
+        if self._scan_injection:
+            report = self._injection_scanner.scan_chunks(
+                [(index, draft.content) for index, draft in enumerate(drafts)]
+            )
+            if report.is_quarantined:
+                self._log_injection(message, content, report)
+                raise QuarantinedError(report.reason)
+            if report.trace.flagged_count:
+                logger.warning(
+                    "document has flagged-but-allowed chunks",
+                    extra={
+                        "job_id": str(message.job_id),
+                        "safety": report.trace.as_metadata(),
+                    },
+                )
+
         async with session_scope(self._factory) as session:
             await bind_workspace(session, message.workspace_id)
             await session.execute(
@@ -419,6 +448,26 @@ class IngestionWorker:
         logger.warning(
             "document quarantined",
             extra={"job_id": str(message.job_id), "reason": reason},
+        )
+
+    def _log_injection(
+        self,
+        message: JobMessage,
+        content: _LoadedContent,
+        report: DocumentSafetyReport,
+    ) -> None:
+        """Emit a privacy-safe security event for a prompt-injection quarantine.
+
+        Carries only counts, categories, and the aggregate score — never the
+        matched chunk text — so operators can alert without the event leaking
+        untrusted document content.
+        """
+        log_security_event(
+            "prompt_injection_quarantine",
+            job_id=str(message.job_id),
+            workspace_id=str(message.workspace_id),
+            document_id=str(content.document_id),
+            **report.trace.as_metadata(),
         )
 
     async def _fail(self, message: JobMessage, error: str, *, retry: bool) -> None:
@@ -522,6 +571,16 @@ def _main() -> None:
         ),
         scanner=SignatureScanner(),
         ocr_engine=build_ocr_engine(settings.ocr_engine, settings.ocr_languages),
+        injection_scanner=InjectionScanner(
+            InjectionDetector(
+                policy=InjectionPolicyConfig(
+                    flag_score=settings.injection_flag_score,
+                    quarantine_score=settings.injection_quarantine_score,
+                    quarantine_on_high_severity=(settings.injection_quarantine_on_high_severity),
+                )
+            )
+        ),
+        scan_injection=settings.injection_scan_enabled,
         store_page_images=settings.ingestion_store_page_images,
         chunk_max_chars=settings.chunk_max_chars,
         chunk_overlap_chars=settings.chunk_overlap_chars,

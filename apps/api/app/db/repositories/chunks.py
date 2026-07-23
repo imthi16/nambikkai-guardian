@@ -78,11 +78,21 @@ class ChunkRepository(WorkspaceScopedRepository[Chunk]):
             query = query.op("||")(to_tsquery(term))
 
         rank = func.ts_rank_cd(document, query).label("score")
+        # Only READY documents are candidates: a quarantined or failed document
+        # must never contribute evidence, so its chunks are excluded here (the
+        # retrieval boundary), not merely hidden in the UI. This is the same
+        # gate `get_provenance` enforces, applied at candidate generation.
+        ready_versions = (
+            select(DocumentVersion.id)
+            .join(Document, DocumentVersion.document_id == Document.id)
+            .where(Document.status == DocumentStatus.READY)
+        )
         statement = (
             select(Chunk.id, rank)
             .where(
                 Chunk.workspace_id == self.workspace_id,
                 document.op("@@")(query),
+                Chunk.document_version_id.in_(ready_versions),
             )
             .order_by(rank.desc(), Chunk.id)
             .limit(limit)

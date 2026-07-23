@@ -85,6 +85,15 @@ class Settings(BaseSettings):
     rag_min_evidence: int = 1
     rag_min_evidence_score: float = 0.0
 
+    # Prompt-injection defence (PR 17). The ingestion worker scans chunks and
+    # quarantines a document when any chunk crosses the quarantine threshold;
+    # retrieval enforces the quarantine again. Thresholds are conservative and
+    # must not be weakened to pass evaluations.
+    injection_scan_enabled: bool = True
+    injection_flag_score: float = 0.5
+    injection_quarantine_score: float = 0.8
+    injection_quarantine_on_high_severity: bool = True
+
     # Security hardening (PR 18). Defaults are safe for local development; the
     # `enforce_secure_deployment` validator tightens them for staging/production.
     cors_allowed_origins: str = ""
@@ -140,6 +149,20 @@ class Settings(BaseSettings):
                 if not origin.startswith("https://"):
                     msg = "CORS_ALLOWED_ORIGINS must use https in staging and production"
                     raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def enforce_injection_thresholds(self) -> Self:
+        """Reject an inconsistent prompt-injection threshold ordering.
+
+        The scanner requires ``0 < flag_score <= quarantine_score <= 1`` so that
+        flagging is always at least as permissive as quarantining; catching a
+        misconfiguration here fails closed at startup rather than silently
+        weakening the defence at runtime.
+        """
+        if not 0.0 < self.injection_flag_score <= self.injection_quarantine_score <= 1.0:
+            msg = "require 0 < INJECTION_FLAG_SCORE <= INJECTION_QUARANTINE_SCORE <= 1"
+            raise ValueError(msg)
         return self
 
 

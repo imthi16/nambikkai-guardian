@@ -48,6 +48,9 @@ class RetrievedChunk:
     ocr_engine: str | None
     ocr_confidence: float | None
     rerank_score: float | None = None
+    # The reranker's absolute (un-normalized) score; ``rerank_score`` above is
+    # normalized within the result set and is not comparable across queries.
+    rerank_raw_score: float | None = None
     rerank_rank: int | None = None
 
 

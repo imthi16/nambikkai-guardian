@@ -150,3 +150,58 @@ set or cross a tenant boundary. Failure is safe by construction: if the
 reranker raises, the service preserves the fused order (flagged in telemetry)
 rather than dropping authorized evidence. The retrieval trace records the
 reranker model, latency, and dropped count, never passage text or the query.
+
+## Grounded answer pipeline
+
+`app.rag` turns an authorized query into a **grounded answer or a calibrated
+abstention** with a typed [LangGraph](https://langchain-ai.github.io/langgraph/)
+state machine. The graph's single state object is a validated Pydantic
+`RagState`, so every transition is type-checked and the fields a node may read
+or write are explicit. Nodes are small and each returns a partial update that
+LangGraph merges back in.
+
+The pipeline is a straight line with three hard gates that cannot be bypassed
+because they are the graph's own conditional edges:
+
+```text
+authorize ─▶ analyze ─▶ retrieve ─▶ generate ─▶ verify ─▶ compose ─▶ answer
+    │                       │                        │
+    └── abstain ◀───────────┴── abstain ◀────────────┴── abstain
+```
+
+1. **authorize** — the request must carry a proven workspace scope (membership,
+   role, and row-level security are already bound by the route dependency);
+   otherwise the graph routes straight to abstention and retrieval never runs.
+2. **retrieve** — evidence comes only through the workspace-scoped
+   `HybridRetrievalService` behind the `EvidenceRetriever` port, so a node can
+   only ever see this tenant's chunks. The **evidence-sufficiency gate** then
+   abstains unless enough sufficiently-scored passages were found, so
+   generation never runs on empty or thin evidence. Only the minimal top
+   passages (`RAG_MAX_EVIDENCE`) reach generation.
+3. **generate** — the `AnswerGenerator` proposes *candidate claims*, each a
+   quote pinned to one supplied passage's `chunk_id`. The MVP `ExtractiveGenerator`
+   selects the sentence best covering the query (unigram + character-trigram
+   overlap, so English, Tamil, and Tanglish work with no language tables); a
+   hosted LLM can replace it behind the same interface.
+4. **verify** — the `ClaimVerifier` resolves each candidate's cited passage from
+   the authorized set (rejecting any claim that cites an unknown chunk),
+   confirms the quote actually occurs in that chunk, and assigns a *calibrated*
+   confidence blending retrieval, rerank, OCR, and query-overlap signals rather
+   than any model's self-reported score. Only `SUPPORTED` claims survive, so a
+   hallucinated or paraphrased quote cannot be cited. The **support gate**
+   abstains when nothing survives.
+5. **compose** — the answer is assembled from supported claims only, with a
+   citation per claim carrying exact provenance (document, version, page,
+   section, in-chunk offsets, language). The outcome is `PARTIAL` when some
+   candidates were dropped, `ANSWERED` otherwise.
+
+Evidence content is untrusted data end to end: nodes quote, score, and cite it
+but never treat anything it says as an instruction. Every run emits a
+structured `RagTrace` (gate decisions, counts, outcome, timings, embedded
+retrieval trace) that carries no query text, evidence text, answer text, or
+secrets, so it is safe to log, return, and persist; `RagService` records it as
+an append-only audit event. The endpoint `POST /workspaces/{id}/answer`
+requires the `QUERY` capability and clamps caller-supplied `top_k` to
+`RAG_MAX_TOP_K`. A deterministic, DB-free evaluation asserts the measurable
+promises: answerable multilingual queries ground with exact citations, and
+out-of-corpus queries abstain instead of inventing an answer.

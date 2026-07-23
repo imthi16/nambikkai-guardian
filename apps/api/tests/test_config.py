@@ -16,6 +16,16 @@ def test_development_defaults_are_usable() -> None:
     assert settings.jwt_secret.get_secret_value() == "development-only-change-me"
 
 
+def test_rag_pipeline_defaults_are_present() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.rag_top_k == 8
+    assert settings.rag_max_top_k == 20
+    assert settings.rag_max_evidence == 6
+    assert settings.rag_min_evidence == 1
+    assert settings.rag_min_evidence_score == 0.0
+
+
 @pytest.mark.parametrize("environment", ["staging", "production"])
 def test_deployed_environments_reject_local_secrets(environment: str) -> None:
     with pytest.raises(ValidationError, match="JWT_SECRET must be replaced"):

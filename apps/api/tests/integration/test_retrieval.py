@@ -125,6 +125,31 @@ async def test_lexical_recall_matches_english_terms(db_session: AsyncSession) ->
     assert result.chunks[0].chunk_id == target.id
 
 
+async def test_lexical_recall_matches_partial_terms(db_session: AsyncSession) -> None:
+    """A relevant chunk is recalled even when the query carries extra terms.
+
+    Query terms are OR-combined, so evidence that omits one query word (here
+    "date") is still retrieved rather than filtered out by an all-terms AND.
+    Without this, a natural query would abstain against otherwise-grounded
+    evidence.
+    """
+    owner = await factories.make_user(db_session)
+    workspace = await factories.make_workspace(db_session, owner)
+    target = await _seed_chunk(
+        db_session,
+        workspace=workspace,
+        owner=owner,
+        content="The invoice payment is due within thirty days of receipt.",
+        language="eng",
+    )
+
+    # "date" never appears in the chunk; an AND query would match nothing.
+    result = await _service(db_session, _dense_vector()).search(
+        workspace_id=workspace.id, query="invoice payment due date"
+    )
+    assert target.id in _ids(result.chunks)
+
+
 async def test_lexical_recall_matches_tamil_terms(db_session: AsyncSession) -> None:
     owner = await factories.make_user(db_session)
     workspace = await factories.make_workspace(db_session, owner)

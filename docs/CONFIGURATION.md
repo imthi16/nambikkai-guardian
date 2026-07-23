@@ -41,6 +41,11 @@ The committed `.env.example` contains non-secret local defaults only.
 | `RERANK_ENABLED` | Rerank fused candidates before returning | `true` |
 | `RERANK_THRESHOLD` | Minimum normalized rerank score (0-1) to keep a candidate | `0.0` |
 | `RERANK_CANDIDATE_LIMIT` | Fused candidates fed to the reranker before truncation | `30` |
+| `RAG_TOP_K` | Default evidence passages retrieved for a grounded answer | `8` |
+| `RAG_MAX_TOP_K` | Upper bound a request's answer `top_k` is clamped to | `20` |
+| `RAG_MAX_EVIDENCE` | Max passages sent to generation (kept minimal) | `6` |
+| `RAG_MIN_EVIDENCE` | Passages required to clear the sufficiency gate, else abstain | `1` |
+| `RAG_MIN_EVIDENCE_SCORE` | Minimum fused score a passage needs to count as evidence | `0.0` |
 
 Known local secrets are rejected when `APP_ENV` is `staging` or `production`. Deployed secrets must
 come from a secret manager or protected environment configuration, never a checked-in file. Keep

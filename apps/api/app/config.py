@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     rerank_enabled: bool = True
     rerank_threshold: float = 0.0
     rerank_candidate_limit: int = 30
+    rag_top_k: int = 8
+    rag_max_top_k: int = 20
+    rag_max_evidence: int = 6
+    rag_min_evidence: int = 1
+    rag_min_evidence_score: float = 0.0
 
     @model_validator(mode="after")
     def enforce_deployment_secrets(self) -> Self:

@@ -45,20 +45,35 @@ class ChunkRepository(WorkspaceScopedRepository[Chunk]):
     ) -> Sequence[LexicalMatch]:
         """Rank workspace chunks against the query variants by full-text score.
 
-        The variants (normalized, transliterated, expansions) are OR-combined
-        with ``websearch_to_tsquery`` so a Tanglish query can match Tamil-script
-        content. Optional `document_id`/`language` narrow the candidate set
-        before ranking. Returns at most `limit` matches, best first.
+        The variants (normalized, transliterated, expansions) are split into
+        their individual terms and OR-combined with ``websearch_to_tsquery`` so
+        a Tanglish query can match Tamil-script content *and* a chunk missing a
+        single query word is still recalled. This is a deliberately high-recall
+        first pass: ``ts_rank_cd`` still ranks chunks covering more terms higher,
+        and fusion, reranking, and claim verification recover precision. (An
+        all-terms AND query would abstain the moment one query word is absent
+        from otherwise-relevant evidence.) Optional `document_id`/`language`
+        narrow the candidate set before ranking. Returns at most `limit`
+        matches, best first.
         """
-        cleaned = [variant.strip() for variant in variants if variant and variant.strip()]
-        if not cleaned:
+        # Split every variant into terms, preserving first-seen order and
+        # dropping duplicates, so the OR query has no redundant clauses.
+        seen: set[str] = set()
+        terms: list[str] = []
+        for variant in variants:
+            for term in (variant or "").split():
+                if term not in seen:
+                    seen.add(term)
+                    terms.append(term)
+        if not terms:
             return []
 
         document = to_tsvector(Chunk.content)
-        # Combine per-variant tsqueries with the || (OR) operator.
-        query = to_tsquery(cleaned[0])
-        for variant in cleaned[1:]:
-            query = query.op("||")(to_tsquery(variant))
+        # OR the per-term tsqueries so partial matches are recalled; ts_rank_cd
+        # rewards chunks matching more of them.
+        query = to_tsquery(terms[0])
+        for term in terms[1:]:
+            query = query.op("||")(to_tsquery(term))
 
         rank = func.ts_rank_cd(document, query).label("score")
         statement = (

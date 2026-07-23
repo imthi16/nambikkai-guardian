@@ -156,6 +156,7 @@ class HybridRetrievalService:
                 replace(
                     base,
                     rerank_score=ranked.normalized_score,
+                    rerank_raw_score=ranked.raw_score,
                     rerank_rank=ranked.rank,
                 )
             )

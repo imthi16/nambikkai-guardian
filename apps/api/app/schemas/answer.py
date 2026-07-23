@@ -21,11 +21,13 @@ class AnswerRequest(BaseModel):
 class CitationResponse(BaseModel):
     """One evidence span supporting a claim, with full provenance.
 
-    Offsets are exposed both relative to the source chunk
-    (``quote_char_start``/``quote_char_end``) and relative to the whole document
-    (``document_quote_char_start``/``document_quote_char_end``), and the source
-    chunk's OCR provenance travels with the citation so a consumer can locate
-    and weigh the exact evidence without a second lookup.
+    Offsets are exposed relative to the source chunk
+    (``quote_char_start``/``quote_char_end``) and relative to the page
+    (``page_quote_char_start``/``page_quote_char_end``); chunk offsets never
+    span pages, so a page-relative position is the strongest offset available
+    without a persisted per-page base. The source chunk's OCR provenance travels
+    with the citation so a consumer can weigh the exact evidence without a
+    second lookup.
     """
 
     chunk_id: uuid.UUID
@@ -34,8 +36,8 @@ class CitationResponse(BaseModel):
     quote: str
     quote_char_start: int
     quote_char_end: int
-    document_quote_char_start: int
-    document_quote_char_end: int
+    page_quote_char_start: int
+    page_quote_char_end: int
     page_number: int | None
     section: str | None
     language: str | None
@@ -86,8 +88,8 @@ class AnswerResponse(BaseModel):
                         quote=claim.citation.quote,
                         quote_char_start=claim.citation.quote_char_start,
                         quote_char_end=claim.citation.quote_char_end,
-                        document_quote_char_start=claim.citation.document_quote_char_start,
-                        document_quote_char_end=claim.citation.document_quote_char_end,
+                        page_quote_char_start=claim.citation.page_quote_char_start,
+                        page_quote_char_end=claim.citation.page_quote_char_end,
                         page_number=claim.citation.page_number,
                         section=claim.citation.section,
                         language=claim.citation.language,

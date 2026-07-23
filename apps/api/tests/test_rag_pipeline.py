@@ -371,10 +371,10 @@ def test_verifier_uses_absolute_rerank_score_not_relative_rank() -> None:
     assert ClaimVerifier().verify("invoice payment due date", [candidate], [passage]) == []
 
 
-def test_citation_carries_document_absolute_offsets_and_ocr_provenance() -> None:
+def test_citation_carries_page_relative_offsets_and_ocr_provenance() -> None:
     passage = _passage(
         "invoice payment is due within thirty days",
-        2,  # char_start = 2000
+        2,  # char_start = 2000 (page-relative)
         ocr_engine="paddle",
         ocr_confidence=0.6,
     )
@@ -391,8 +391,8 @@ def test_citation_carries_document_absolute_offsets_and_ocr_provenance() -> None
     assert len(claims) == 1
     citation = claims[0].citation
     assert citation.chunk_char_start == passage.char_start
-    assert citation.document_quote_char_start == passage.char_start + start
-    assert citation.document_quote_char_end == passage.char_start + start + len(quote)
+    assert citation.page_quote_char_start == passage.char_start + start
+    assert citation.page_quote_char_end == passage.char_start + start + len(quote)
     assert citation.ocr_engine == "paddle"
     assert citation.ocr_confidence == 0.6
 

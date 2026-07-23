@@ -73,8 +73,9 @@ class Citation:
     """Links one claim span to the exact evidence span that supports it.
 
     Offsets are relative to the source chunk's content so a viewer can
-    highlight the quote; ``quote_char_start``/``quote_char_end`` added to the
-    chunk's own ``char_start`` recover the document-absolute offsets.
+    highlight the quote. Chunk offsets never span pages, so adding
+    ``quote_char_start``/``quote_char_end`` to the chunk's own ``char_start``
+    recovers a *page-relative* offset, not a document-wide one.
     """
 
     chunk_id: uuid.UUID
@@ -86,8 +87,8 @@ class Citation:
     page_number: int | None
     section: str | None
     language: str | None
-    # The source chunk's own span within the document, so a client can recover
-    # the document-absolute quote offsets without re-fetching the chunk.
+    # The source chunk's own span within its page, so a client can recover the
+    # page-relative quote offsets without re-fetching the chunk.
     chunk_char_start: int
     chunk_char_end: int
     # OCR provenance for the source chunk (``None`` for born-digital text), so a
@@ -96,13 +97,13 @@ class Citation:
     ocr_confidence: float | None
 
     @property
-    def document_quote_char_start(self) -> int:
-        """The quote's start offset relative to the whole document."""
+    def page_quote_char_start(self) -> int:
+        """The quote's start offset within its page's text."""
         return self.chunk_char_start + self.quote_char_start
 
     @property
-    def document_quote_char_end(self) -> int:
-        """The quote's end offset relative to the whole document."""
+    def page_quote_char_end(self) -> int:
+        """The quote's end offset within its page's text."""
         return self.chunk_char_start + self.quote_char_end
 
     def as_metadata(self) -> dict[str, object]:
@@ -113,8 +114,8 @@ class Citation:
             "section": self.section,
             "quote_char_start": self.quote_char_start,
             "quote_char_end": self.quote_char_end,
-            "document_quote_char_start": self.document_quote_char_start,
-            "document_quote_char_end": self.document_quote_char_end,
+            "page_quote_char_start": self.page_quote_char_start,
+            "page_quote_char_end": self.page_quote_char_end,
             "ocr_engine": self.ocr_engine,
             "ocr_confidence": self.ocr_confidence,
         }

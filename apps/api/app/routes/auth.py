@@ -5,15 +5,21 @@ The credential-bearing POST endpoints are rate limited per client and path;
 throttle legitimate polling without slowing an attacker down.
 """
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.auth import errors
-from app.auth.dependencies import AuthServiceDep, CurrentUserDep, enforce_auth_rate_limit
+from app.auth.dependencies import (
+    AuthServiceDep,
+    CurrentUserDep,
+    SessionDep,
+    enforce_auth_rate_limit,
+)
 from app.auth.service import (
     EmailAlreadyRegisteredError,
     InvalidCredentialsError,
     InvalidRefreshTokenError,
 )
+from app.db.repositories.audit import AuditLogRepository
 from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
@@ -22,6 +28,7 @@ from app.schemas.auth import (
     TokenPairResponse,
     UserResponse,
 )
+from app.security.events import log_security_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 _rate_limited = [Depends(enforce_auth_rate_limit)]
@@ -33,7 +40,9 @@ _rate_limited = [Depends(enforce_auth_rate_limit)]
     status_code=status.HTTP_201_CREATED,
     dependencies=_rate_limited,
 )
-async def register(body: RegisterRequest, auth: AuthServiceDep) -> UserResponse:
+async def register(
+    body: RegisterRequest, auth: AuthServiceDep, session: SessionDep
+) -> UserResponse:
     try:
         user = await auth.register(
             email=body.email,
@@ -42,16 +51,34 @@ async def register(body: RegisterRequest, auth: AuthServiceDep) -> UserResponse:
         )
     except EmailAlreadyRegisteredError:
         raise errors.email_already_registered() from None
+    await AuditLogRepository(session).record(
+        action="auth.user_registered",
+        resource_type="user",
+        resource_id=user.id,
+        actor_user_id=user.id,
+    )
     return UserResponse.model_validate(user)
 
 
 @router.post("/login", response_model=TokenPairResponse, dependencies=_rate_limited)
-async def login(body: LoginRequest, auth: AuthServiceDep) -> TokenPairResponse:
+async def login(
+    body: LoginRequest, auth: AuthServiceDep, session: SessionDep, request: Request
+) -> TokenPairResponse:
     try:
         user = await auth.authenticate(email=body.email, password=body.password)
     except InvalidCredentialsError:
+        # Failure rolls back the request, so it is logged (never with the
+        # submitted email) rather than written to the audit table.
+        client = request.client.host if request.client else "unknown"
+        log_security_event("login_failed", client=client)
         raise errors.invalid_credentials() from None
     pair = await auth.issue_session(user)
+    await AuditLogRepository(session).record(
+        action="auth.login_succeeded",
+        resource_type="user",
+        resource_id=user.id,
+        actor_user_id=user.id,
+    )
     return TokenPairResponse(
         access_token=pair.access_token,
         refresh_token=pair.refresh_token,

@@ -12,6 +12,7 @@ _UNSAFE_JWT_SECRETS = {
     "development-only-change-me",
     "replace-with-a-long-random-value",
 }
+_MIN_DEPLOYED_JWT_SECRET_LENGTH = 32
 
 
 def _find_repository_env(module_path: Path) -> Path | None:
@@ -84,6 +85,24 @@ class Settings(BaseSettings):
     rag_min_evidence: int = 1
     rag_min_evidence_score: float = 0.0
 
+    # Security hardening (PR 18). Defaults are safe for local development; the
+    # `enforce_secure_deployment` validator tightens them for staging/production.
+    cors_allowed_origins: str = ""
+    security_hsts_enabled: bool = False
+    security_hsts_max_age_seconds: int = 63072000
+    security_csp: str = (
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+    )
+    global_rate_limit_attempts: int = 300
+    global_rate_limit_window_seconds: int = 60
+    max_request_body_bytes: int = 32 * 1024 * 1024
+    workspace_max_documents: int = 1000
+    workspace_storage_quota_bytes: int = 5 * 1024 * 1024 * 1024
+
+    def cors_origins(self) -> list[str]:
+        """Parse the comma-separated allowlist; empty means no cross-origin access."""
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
     @model_validator(mode="after")
     def enforce_deployment_secrets(self) -> Self:
         """Reject known local-only secrets outside development and test."""
@@ -94,6 +113,33 @@ class Settings(BaseSettings):
             if self.s3_secret_key.get_secret_value() == "minio123":
                 msg = "S3_SECRET_KEY must be replaced in staging and production"
                 raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def enforce_secure_deployment(self) -> Self:
+        """Fail closed on unsafe security configuration for deployed environments.
+
+        A short JWT secret, a wildcard or plaintext CORS origin, or a request
+        cap that cannot admit a legitimate upload are configuration mistakes;
+        rejecting them at startup is preferable to serving with a weak posture.
+        """
+        if self.max_request_body_bytes < self.max_upload_bytes:
+            msg = "MAX_REQUEST_BODY_BYTES must be at least MAX_UPLOAD_BYTES"
+            raise ValueError(msg)
+        if "*" in self.cors_origins():
+            msg = "CORS_ALLOWED_ORIGINS must not include a wildcard origin"
+            raise ValueError(msg)
+        if self.app_env in {"staging", "production"}:
+            if len(self.jwt_secret.get_secret_value()) < _MIN_DEPLOYED_JWT_SECRET_LENGTH:
+                msg = (
+                    "JWT_SECRET must be at least "
+                    f"{_MIN_DEPLOYED_JWT_SECRET_LENGTH} characters in staging and production"
+                )
+                raise ValueError(msg)
+            for origin in self.cors_origins():
+                if not origin.startswith("https://"):
+                    msg = "CORS_ALLOWED_ORIGINS must use https in staging and production"
+                    raise ValueError(msg)
         return self
 
 

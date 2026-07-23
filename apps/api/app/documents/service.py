@@ -32,9 +32,38 @@ class FileTooLargeError(Exception):
     """The upload exceeds the configured size cap."""
 
 
+class WorkspaceQuotaExceededError(Exception):
+    """Accepting this upload would exceed a per-workspace quota."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
 def enforce_size_cap(data: bytes, max_upload_bytes: int) -> None:
     if len(data) > max_upload_bytes:
         raise FileTooLargeError
+
+
+async def enforce_workspace_quota(
+    documents: DocumentRepository,
+    *,
+    incoming_bytes: int,
+    max_documents: int,
+    storage_quota_bytes: int,
+) -> None:
+    """Reject an upload that would breach the workspace document or byte quota."""
+    if await documents.count() >= max_documents:
+        raise WorkspaceQuotaExceededError(
+            "workspace_document_limit_reached",
+            f"This workspace has reached its limit of {max_documents} documents.",
+        )
+    if await documents.total_size_bytes() + incoming_bytes > storage_quota_bytes:
+        raise WorkspaceQuotaExceededError(
+            "workspace_storage_quota_exceeded",
+            f"This upload would exceed the {storage_quota_bytes} byte storage quota.",
+        )
 
 
 async def store_new_document(
@@ -49,6 +78,8 @@ async def store_new_document(
     data: bytes,
     title: str | None,
     max_upload_bytes: int,
+    workspace_max_documents: int,
+    workspace_storage_quota_bytes: int,
 ) -> Document:
     """Run the full secure-upload workflow and return the new document."""
     enforce_size_cap(data, max_upload_bytes)
@@ -59,6 +90,12 @@ async def store_new_document(
     existing = await documents.get_by_sha256(sha256)
     if existing is not None:
         raise DuplicateDocumentError(existing.id)
+    await enforce_workspace_quota(
+        documents,
+        incoming_bytes=len(data),
+        max_documents=workspace_max_documents,
+        storage_quota_bytes=workspace_storage_quota_bytes,
+    )
 
     document = await documents.add(
         Document(
@@ -112,5 +149,6 @@ __all__ = [
     "DuplicateDocumentError",
     "FileTooLargeError",
     "UploadRejectedError",
+    "WorkspaceQuotaExceededError",
     "store_new_document",
 ]

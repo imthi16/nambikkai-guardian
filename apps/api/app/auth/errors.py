@@ -154,3 +154,8 @@ def document_not_found() -> HTTPException:
         "document_not_found",
         "The document does not exist in this workspace.",
     )
+
+
+def workspace_quota_exceeded(code: str, message: str) -> HTTPException:
+    """A per-workspace document-count or storage-byte quota was reached."""
+    return _error(status.HTTP_413_CONTENT_TOO_LARGE, code, message)

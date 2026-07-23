@@ -17,7 +17,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.db.models.documents import Chunk, DocumentVersion
+from app.citations.types import ChunkProvenance
+from app.db.models.documents import Chunk, Document, DocumentVersion
 from app.db.repositories.base import WorkspaceScopedRepository
 
 # Matches the configuration of ix_chunks_content_fts (migration 0008).
@@ -96,6 +97,47 @@ class ChunkRepository(WorkspaceScopedRepository[Chunk]):
 
         rows = await self._session.execute(statement)
         return [LexicalMatch(chunk_id=row.id, score=float(row.score)) for row in rows]
+
+    async def get_provenance(self, chunk_id: uuid.UUID) -> ChunkProvenance | None:
+        """Load one chunk's immutable provenance within this workspace.
+
+        Joins the chunk to its document version and document to carry the title
+        and version number a citation needs. The workspace filter is applied on
+        the chunk (and row-level security fences it again), so a chunk owned by
+        another tenant resolves to ``None`` and is indistinguishable from one
+        that does not exist.
+        """
+        statement = (
+            select(
+                Chunk,
+                DocumentVersion.document_id,
+                DocumentVersion.version_number,
+                Document.title,
+            )
+            .join(DocumentVersion, Chunk.document_version_id == DocumentVersion.id)
+            .join(Document, DocumentVersion.document_id == Document.id)
+            .where(Chunk.id == chunk_id, Chunk.workspace_id == self.workspace_id)
+        )
+        row = (await self._session.execute(statement)).first()
+        if row is None:
+            return None
+        chunk, document_id, version_number, title = row
+        return ChunkProvenance(
+            chunk_id=chunk.id,
+            chunk_index=chunk.chunk_index,
+            document_id=document_id,
+            document_title=title,
+            document_version_id=chunk.document_version_id,
+            version_number=version_number,
+            content=chunk.content,
+            page_number=chunk.page_number,
+            section=chunk.section,
+            char_start=chunk.char_start,
+            char_end=chunk.char_end,
+            language=chunk.language,
+            ocr_engine=chunk.ocr_engine,
+            ocr_confidence=chunk.ocr_confidence,
+        )
 
     async def get_many(self, chunk_ids: Sequence[uuid.UUID]) -> Sequence[Chunk]:
         """Load full chunk rows for the given ids within this workspace, order preserved."""

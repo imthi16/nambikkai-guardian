@@ -24,6 +24,24 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+# Indexes that live only in migrations (not in model metadata) because their
+# definitions do not round-trip through Alembic autogenerate. They are excluded
+# from comparison so `alembic check` does not report false drift.
+_AUTOGENERATE_IGNORED_INDEXES = frozenset({"ix_chunk_embeddings_embedding_cosine"})
+
+
+def _include_object(
+    object_: object,
+    name: str | None,
+    type_: str,
+    reflected: bool,
+    compare_to: object,
+) -> bool:
+    """Exclude migration-only ANN indexes from autogenerate comparison."""
+    if type_ == "index" and name in _AUTOGENERATE_IGNORED_INDEXES:
+        return False
+    return True
+
 
 def _database_url() -> str:
     """Resolve the URL from the environment first, then application settings."""
@@ -38,6 +56,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        include_object=_include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -48,6 +67,7 @@ def _run_migrations(connection: Connection) -> None:
         connection=connection,
         target_metadata=target_metadata,
         compare_type=True,
+        include_object=_include_object,
     )
     with context.begin_transaction():
         context.run_migrations()

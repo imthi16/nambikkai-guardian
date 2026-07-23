@@ -3,6 +3,7 @@
 from app.db.repositories.audit import AuditLogRepository
 from app.db.repositories.base import Repository, WorkspaceScopedRepository
 from app.db.repositories.documents import DocumentRepository
+from app.db.repositories.embeddings import ChunkEmbeddingRepository, VectorMatch
 from app.db.repositories.identity import (
     MembershipRepository,
     RefreshTokenRepository,
@@ -12,11 +13,13 @@ from app.db.repositories.identity import (
 
 __all__ = [
     "AuditLogRepository",
+    "ChunkEmbeddingRepository",
     "DocumentRepository",
     "MembershipRepository",
     "RefreshTokenRepository",
     "Repository",
     "UserRepository",
+    "VectorMatch",
     "WorkspaceRepository",
     "WorkspaceScopedRepository",
 ]

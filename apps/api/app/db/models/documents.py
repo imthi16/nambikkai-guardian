@@ -9,6 +9,7 @@ without joins; it must always equal the owning document's workspace.
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -25,6 +26,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, WorkspaceOwnedModel
 from app.db.models.enums import DocumentStatus, pg_enum
+
+# BGE-M3 embedding width; the embeddings table is fixed to this dimension.
+EMBEDDING_DIMENSIONS = 1024
 
 if TYPE_CHECKING:
     from app.db.models.identity import Workspace
@@ -143,3 +147,43 @@ class Chunk(WorkspaceOwnedModel):
     ocr_confidence: Mapped[float | None] = mapped_column(Float)
 
     document_version: Mapped[DocumentVersion] = relationship(back_populates="chunks")
+    embedding: Mapped["ChunkEmbedding | None"] = relationship(
+        back_populates="chunk",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class ChunkEmbedding(WorkspaceOwnedModel):
+    """The dense vector for one chunk, with model provenance.
+
+    One embedding per chunk per model (unique on `chunk_id, model,
+    model_version`), so a model upgrade adds rows rather than silently
+    overwriting reproducible provenance. `workspace_id` is denormalized from
+    the chunk so vector search can filter by tenant before scoring.
+    """
+
+    __tablename__ = "chunk_embeddings"
+    __table_args__ = (
+        UniqueConstraint(
+            "chunk_id",
+            "model",
+            "model_version",
+            name="uq_chunk_embeddings_chunk_id_model_model_version",
+        ),
+        # The IVFFlat ANN index (ix_chunk_embeddings_embedding_cosine) is
+        # created in migration 0007 and deliberately excluded from Alembic
+        # autogenerate (see infra/migrations/env.py): pgvector operator-class
+        # indexes do not round-trip cleanly through reflection.
+    )
+
+    chunk_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("chunks.id", ondelete="CASCADE"),
+        index=True,
+    )
+    model: Mapped[str] = mapped_column(String(100))
+    model_version: Mapped[str] = mapped_column(String(100))
+    dimensions: Mapped[int] = mapped_column(Integer)
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
+
+    chunk: Mapped[Chunk] = relationship(back_populates="embedding")

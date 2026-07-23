@@ -64,6 +64,13 @@ class Settings(BaseSettings):
     ocr_languages: str = "tam+eng"
     chunk_max_chars: int = 1200
     chunk_overlap_chars: int = 150
+    embedding_provider: Literal["local"] = "local"
+    embedding_model: str = "bge-m3-local"
+    embedding_model_version: str = "hashing-v1"
+    embedding_dimensions: int = 1024
+    embedding_batch_size: int = 32
+    embedding_max_attempts: int = 3
+    embedding_backoff_seconds: float = 0.5
 
     @model_validator(mode="after")
     def enforce_deployment_secrets(self) -> Self:

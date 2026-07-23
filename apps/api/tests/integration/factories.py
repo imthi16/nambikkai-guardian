@@ -4,6 +4,7 @@ import uuid
 
 from app.db.models import (
     Chunk,
+    ChunkEmbedding,
     Citation,
     Conversation,
     Document,
@@ -15,6 +16,7 @@ from app.db.models import (
     User,
     Workspace,
 )
+from app.db.models.documents import EMBEDDING_DIMENSIONS
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -98,6 +100,30 @@ async def make_chunk(
     session.add(chunk)
     await session.flush()
     return chunk
+
+
+async def make_embedding(
+    session: AsyncSession,
+    workspace: Workspace,
+    chunk: Chunk,
+    *,
+    model: str = "bge-m3-local",
+    model_version: str = "hashing-v1",
+    fill: float = 0.0,
+) -> ChunkEmbedding:
+    values = [fill] * EMBEDDING_DIMENSIONS
+    values[0] = 1.0
+    embedding = ChunkEmbedding(
+        workspace_id=workspace.id,
+        chunk_id=chunk.id,
+        model=model,
+        model_version=model_version,
+        dimensions=EMBEDDING_DIMENSIONS,
+        embedding=values,
+    )
+    session.add(embedding)
+    await session.flush()
+    return embedding
 
 
 async def make_conversation_with_answer(

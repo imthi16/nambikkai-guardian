@@ -63,3 +63,29 @@ Detection output is untrusted metadata: it informs retrieval and is never fed
 to the model as an instruction. Transliteration and spelling normalization sit
 behind the `Transliterator` and `SpellingNormalizer` protocols so rule-based
 MVP providers can be replaced without touching the orchestration.
+
+## Multilingual embeddings
+
+`app.embeddings` turns chunk and query text into dense vectors behind the
+`EmbeddingProvider` protocol, so the local MVP provider can be replaced by a
+hosted BGE-M3 deployment without changing persistence or retrieval. Every
+provider declares `model`, `model_version`, and `dimensions`, and returns
+typed vectors that are validated (count and width) before use.
+
+The MVP ships `LocalHashingEmbeddingProvider`: a deterministic, dependency-free
+provider that emits 1024-dim unit vectors (BGE-M3's width) from a hashed
+bag-of-features over `app.language`-normalized text. It is a faithful wiring
+stand-in (real dimensionality, deterministic per model version, multilingual)
+but not a semantic model, so it is used for plumbing and tests, not quality
+measurement. Batching and bounded-backoff retries are cross-cutting decorators
+(`BatchingEmbeddingProvider`, `RetryingEmbeddingProvider`) that preserve the
+provider contract and input order.
+
+Vectors persist in `chunk_embeddings`, one row per chunk per model version, so
+a model upgrade adds rows rather than overwriting reproducible provenance. The
+table carries a denormalized `workspace_id`, row-level security matching the
+other tenant tables, and an IVFFlat cosine index. `ChunkEmbeddingRepository`
+is workspace-scoped: persistence checks the chunk belongs to the caller's
+workspace, and cosine search filters by workspace and model version so
+unauthorized vectors never leave the data layer. Telemetry records counts and
+the model, never document text.

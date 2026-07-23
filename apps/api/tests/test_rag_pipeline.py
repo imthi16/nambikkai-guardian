@@ -371,6 +371,37 @@ def test_verifier_uses_absolute_rerank_score_not_relative_rank() -> None:
     assert ClaimVerifier().verify("invoice payment due date", [candidate], [passage]) == []
 
 
+def test_verifier_drops_contradicted_claim_with_valid_quote() -> None:
+    """A claim whose text the evidence refutes is dropped, even with a real quote."""
+    content = "invoice payment is due within thirty days"
+    passage = _passage(content, 0)
+    quote = "invoice payment is due"
+    candidate = CandidateClaim(
+        chunk_id=passage.chunk_id,
+        # The quote is verbatim, but the asserted text changes the number.
+        text="invoice payment is due within sixty days",
+        quote=quote,
+        quote_char_start=0,
+        quote_char_end=len(quote),
+    )
+    assert ClaimVerifier().verify("invoice payment", [candidate], [passage]) == []
+
+
+def test_verifier_supported_claim_carries_explanation() -> None:
+    content = "invoice payment is due within thirty days"
+    passage = _passage(content, 0)
+    candidate = CandidateClaim(
+        chunk_id=passage.chunk_id,
+        text=content,
+        quote=content,
+        quote_char_start=0,
+        quote_char_end=len(content),
+    )
+    claims = ClaimVerifier().verify("invoice payment thirty days", [candidate], [passage])
+    assert len(claims) == 1
+    assert "present in the evidence" in claims[0].explanation
+
+
 def test_citation_carries_page_relative_offsets_and_ocr_provenance() -> None:
     passage = _passage(
         "invoice payment is due within thirty days",

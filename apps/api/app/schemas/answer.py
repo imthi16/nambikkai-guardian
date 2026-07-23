@@ -52,6 +52,7 @@ class ClaimResponse(BaseModel):
     text: str
     verdict: str
     confidence: float
+    explanation: str
     citation: CitationResponse
 
 
@@ -81,6 +82,7 @@ class AnswerResponse(BaseModel):
                     text=claim.text,
                     verdict=claim.verdict.value,
                     confidence=claim.confidence,
+                    explanation=claim.explanation,
                     citation=CitationResponse(
                         chunk_id=claim.citation.chunk_id,
                         document_id=claim.citation.document_id,

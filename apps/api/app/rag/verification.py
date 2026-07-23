@@ -6,15 +6,19 @@ The verifier is the trust gate between a generator's *candidate* claims and the
 1. resolves the cited passage from the authorized evidence set (a claim that
    cites an unknown chunk is rejected: the generator may only cite what it was
    given);
-2. confirms the quoted span actually occurs in that chunk's content, so a
-   fabricated or paraphrased quote cannot be cited;
-3. assigns a verdict and a *calibrated* confidence that blends retrieval,
-   rerank, OCR, and lexical-overlap signals rather than trusting any single
-   score or a model's self-reported confidence.
+2. confirms the cited quote is recovered *exactly* by its offsets, so a
+   fabricated or shifted span cannot be cited;
+3. runs entailment analysis of the claim text against the cited chunk with
+   strict numeric, date, negation, and contradiction checks, yielding a
+   supported / partially-supported / contradicted / unsupported outcome and an
+   explanation;
+4. assigns a *calibrated* confidence that blends retrieval, rerank, OCR, and
+   lexical-overlap signals rather than trusting any single score or a model's
+   self-reported confidence.
 
-Only ``SUPPORTED`` claims survive into the answer. This is deliberately
-conservative: dropping a true-but-unverified claim is safer than surfacing an
-unsupported one.
+Only ``SUPPORTED`` claims survive into the answer; contradicted, unsupported,
+and partially-supported claims are dropped. This is deliberately conservative:
+dropping a true-but-unverified claim is safer than surfacing an unsupported one.
 """
 
 from __future__ import annotations
@@ -26,8 +30,19 @@ from dataclasses import dataclass
 from app.language import normalize_for_match
 from app.rag.generation import CandidateClaim
 from app.rag.types import AtomicClaim, Citation, ClaimVerdict, EvidencePassage
+from app.verification import EntailmentAnalyzer, EntailmentVerdict, get_default_analyzer
 
 _TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
+
+# How an entailment outcome maps onto the persisted claim verdict. "Partial"
+# support has no dedicated persisted value and is not safe to assert whole, so
+# it maps onto AMBIGUOUS and is dropped alongside contradicted/unsupported.
+_VERDICT_FOR_ENTAILMENT = {
+    EntailmentVerdict.SUPPORTED: ClaimVerdict.SUPPORTED,
+    EntailmentVerdict.PARTIAL: ClaimVerdict.AMBIGUOUS,
+    EntailmentVerdict.CONTRADICTED: ClaimVerdict.CONTRADICTED,
+    EntailmentVerdict.UNSUPPORTED: ClaimVerdict.UNSUPPORTED,
+}
 
 
 @dataclass(frozen=True)
@@ -54,9 +69,11 @@ class ClaimVerifier:
         self,
         *,
         config: VerificationConfig | None = None,
-        verifier: str = "extractive-verifier-v1",
+        analyzer: EntailmentAnalyzer | None = None,
+        verifier: str = "entailment-verifier-v1",
     ) -> None:
         self._config = config or VerificationConfig()
+        self._analyzer = analyzer or get_default_analyzer()
         self.verifier = verifier
 
     def verify(
@@ -76,8 +93,10 @@ class ClaimVerifier:
                 # The generator cited a chunk outside the authorized set. This
                 # is never allowed; drop it rather than fabricate provenance.
                 continue
-            verdict, confidence = self._assess(query_tokens, candidate, passage)
+            verdict, confidence, explanation = self._assess(query_tokens, candidate, passage)
             if verdict is not ClaimVerdict.SUPPORTED:
+                # Contradicted, unsupported, and partially-supported claims are
+                # never surfaced; the graph abstains if none survive.
                 continue
             verified.append(
                 AtomicClaim(
@@ -86,6 +105,7 @@ class ClaimVerifier:
                     citation=self._citation(candidate, passage),
                     verdict=verdict,
                     confidence=confidence,
+                    explanation=explanation,
                 )
             )
             index += 1
@@ -96,8 +116,8 @@ class ClaimVerifier:
         query_tokens: set[str],
         candidate: CandidateClaim,
         passage: EvidencePassage,
-    ) -> tuple[ClaimVerdict, float]:
-        """Return the verdict and calibrated confidence for one candidate."""
+    ) -> tuple[ClaimVerdict, float, str]:
+        """Return the verdict, calibrated confidence, and explanation."""
         # The citation offsets must recover the quote *exactly* from the cited
         # chunk. A normalized substring test would accept stale or fabricated
         # offsets and case/whitespace-shifted spans, so a viewer could highlight
@@ -105,23 +125,26 @@ class ClaimVerifier:
         content = passage.content
         start, end = candidate.quote_char_start, candidate.quote_char_end
         if not candidate.quote or not (0 <= start <= end <= len(content)):
-            return ClaimVerdict.UNSUPPORTED, 0.0
+            return ClaimVerdict.UNSUPPORTED, 0.0, "citation offsets do not recover the quote"
         if content[start:end] != candidate.quote:
-            return ClaimVerdict.UNSUPPORTED, 0.0
+            return ClaimVerdict.UNSUPPORTED, 0.0, "citation offsets do not recover the quote"
 
-        # The asserted claim text must itself be grounded in the cited chunk,
-        # not merely accompanied by a harmless verbatim quote. Without this, a
-        # hosted or compromised generator could surface an arbitrary assertion
-        # while citing unrelated text that happens to occur in the chunk.
-        claim_norm = normalize_for_match(candidate.text)
-        if not claim_norm or claim_norm not in normalize_for_match(content):
-            return ClaimVerdict.UNSUPPORTED, 0.0
+        # Entailment is the semantic gate: the claim must be entailed by the
+        # cited chunk, with strict numeric/date/negation/contradiction checks.
+        # This subsumes a plain substring test (a verbatim claim is trivially
+        # entailed) while also catching a paraphrased assertion the evidence
+        # does not support or actively refutes.
+        result = self._analyzer.analyze(candidate.text, content)
+        verdict = _VERDICT_FOR_ENTAILMENT[result.verdict]
+        if verdict is not ClaimVerdict.SUPPORTED:
+            return verdict, 0.0, result.explanation
 
         confidence = self._confidence(query_tokens, candidate, passage)
         if confidence < self._config.min_confidence:
-            # Grounded in text but too weakly connected to the query to assert.
-            return ClaimVerdict.AMBIGUOUS, confidence
-        return ClaimVerdict.SUPPORTED, confidence
+            # Entailed by the evidence but too weakly connected to the query to
+            # assert; treated as partially supported and dropped.
+            return ClaimVerdict.AMBIGUOUS, confidence, "weakly connected to the query"
+        return ClaimVerdict.SUPPORTED, confidence, result.explanation
 
     def _confidence(
         self,

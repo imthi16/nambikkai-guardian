@@ -136,6 +136,9 @@ class AtomicClaim:
     citation: Citation
     verdict: ClaimVerdict
     confidence: float
+    # Why the verifier reached this verdict (entailment outcome, e.g. full
+    # support or the reason a claim was dropped). Non-sensitive; safe to log.
+    explanation: str = ""
 
     @property
     def is_supported(self) -> bool:
@@ -146,6 +149,7 @@ class AtomicClaim:
             "index": self.index,
             "verdict": self.verdict.value,
             "confidence": round(self.confidence, 4),
+            "explanation": self.explanation,
             "citation": self.citation.as_metadata(),
         }
 

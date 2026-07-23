@@ -38,3 +38,28 @@ validate -> scan -> parse/OCR -> normalize -> chunk -> embed -> index
 - `services/retrieval`: lexical and dense search, fusion, filters, reranking.
 - `services/verification`: claim splitting, evidence verification, contradiction checks, abstention.
 - `services/safety`: prompt-injection detection, sanitization, quarantine decisions.
+
+## Language detection and normalization
+
+The query pipeline (`app.language`) turns raw user text into a
+`ProcessedQuery` before retrieval, keeping three representations so intent is
+never lost:
+
+- `original`: the user's exact input, retained verbatim for provenance.
+- `normalized`: Unicode NFC, folded smart/full-width punctuation, and
+  collapsed whitespace. Idempotent and safe to index.
+- `transliterated`: Tanglish (romanized Tamil) rendered into Tamil script so
+  Latin-typed queries can match Tamil-script documents. For Tamil and English
+  it repeats `normalized`.
+
+Detection is deterministic and explainable: it measures Tamil-vs-Latin letter
+ratios, then disambiguates Latin-only text into English or Tanglish using a
+small, auditable marker lexicon. Every result carries a calibrated
+`confidence` and a `limitations` list (for example "mixed Tamil and Latin
+script" or "ambiguous romanized text"), which downstream retrieval uses to
+widen candidates when the signal is weak.
+
+Detection output is untrusted metadata: it informs retrieval and is never fed
+to the model as an instruction. Transliteration and spelling normalization sit
+behind the `Transliterator` and `SpellingNormalizer` protocols so rule-based
+MVP providers can be replaced without touching the orchestration.

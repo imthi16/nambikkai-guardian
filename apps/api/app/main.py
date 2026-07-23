@@ -7,6 +7,7 @@ from app.auth.rate_limit import SlidingWindowRateLimiter
 from app.config import Settings, get_settings
 from app.ingestion.queue import RedisJobQueue
 from app.routes.health import router as health_router
+from app.security import configure_security
 from app.storage.s3 import S3ObjectStorage
 
 
@@ -34,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.include_router(health_router)
     application.include_router(api_v1_router, prefix="/api/v1")
+    configure_security(application, resolved_settings)
     return application
 
 

@@ -21,6 +21,15 @@ The committed `.env.example` contains non-secret local defaults only.
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Rate-limit window length | `60` |
 | `MAX_UPLOAD_BYTES` | Document upload size cap | `26214400` (25 MiB) |
 | `DOWNLOAD_URL_TTL_SECONDS` | Presigned download-link lifetime | `300` |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated browser origin allowlist; empty = same-origin only | `` |
+| `SECURITY_HSTS_ENABLED` | Send `Strict-Transport-Security` (enable behind TLS) | `false` |
+| `SECURITY_HSTS_MAX_AGE_SECONDS` | HSTS `max-age` when enabled | `63072000` (2 years) |
+| `SECURITY_CSP` | `Content-Security-Policy` sent on every API response | locked-down JSON policy |
+| `GLOBAL_RATE_LIMIT_ATTEMPTS` | Requests per client IP per window across all routes | `300` |
+| `GLOBAL_RATE_LIMIT_WINDOW_SECONDS` | Global rate-limit window length | `60` |
+| `MAX_REQUEST_BODY_BYTES` | Max declared request body; must be ≥ `MAX_UPLOAD_BYTES` | `33554432` (32 MiB) |
+| `WORKSPACE_MAX_DOCUMENTS` | Documents a single workspace may hold | `1000` |
+| `WORKSPACE_STORAGE_QUOTA_BYTES` | Total stored bytes a single workspace may hold | `5368709120` (5 GiB) |
 | `INGESTION_QUEUE_KEY`, `INGESTION_DEAD_LETTER_KEY` | Redis list keys for the job queue | `attest:ingestion:*` |
 | `INGESTION_MAX_ATTEMPTS` | Attempts before a job dead-letters | `3` |
 | `INGESTION_STALE_AFTER_SECONDS` | Age before running/queued jobs are recovered | `300` |
@@ -50,6 +59,11 @@ The committed `.env.example` contains non-secret local defaults only.
 Known local secrets are rejected when `APP_ENV` is `staging` or `production`. Deployed secrets must
 come from a secret manager or protected environment configuration, never a checked-in file. Keep
 API docs disabled in deployments where public schema discovery is not intended.
+
+In `staging` and `production` the configuration also fails closed when `JWT_SECRET` is shorter than
+32 characters or when any `CORS_ALLOWED_ORIGINS` entry is a wildcard or a non-`https` origin;
+`MAX_REQUEST_BODY_BYTES` below `MAX_UPLOAD_BYTES` is rejected in every environment. The full
+security posture, threat model, and residual risk are documented in [`SECURITY.md`](./SECURITY.md).
 
 ## OCR engines
 

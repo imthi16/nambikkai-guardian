@@ -3,7 +3,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db.models.documents import Document, DocumentVersion
 from app.db.models.enums import DocumentStatus
@@ -12,6 +12,22 @@ from app.db.repositories.base import Repository, WorkspaceScopedRepository
 
 class DocumentRepository(WorkspaceScopedRepository[Document]):
     model = Document
+
+    async def count(self) -> int:
+        """Number of documents in this workspace (for upload quota checks)."""
+        statement = (
+            select(func.count())
+            .select_from(Document)
+            .where(Document.workspace_id == self.workspace_id)
+        )
+        return await self._session.scalar(statement) or 0
+
+    async def total_size_bytes(self) -> int:
+        """Sum of stored document sizes in this workspace, in bytes."""
+        statement = select(func.coalesce(func.sum(Document.size_bytes), 0)).where(
+            Document.workspace_id == self.workspace_id
+        )
+        return await self._session.scalar(statement) or 0
 
     async def list_by_status(self, status: DocumentStatus) -> Sequence[Document]:
         statement = select(Document).where(

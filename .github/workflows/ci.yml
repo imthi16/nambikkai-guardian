@@ -139,3 +139,29 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container-scan:
+    name: Container image scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -t attest-api:scan apps/api
+      - name: Build web image
+        run: docker build -t attest-web:scan apps/web
+      - name: Scan API image for OS and library vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: attest-api:scan
+          severity: CRITICAL,HIGH
+          vuln-type: os,library
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Scan web image for OS and library vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: attest-web:scan
+          severity: CRITICAL,HIGH
+          vuln-type: os,library
+          ignore-unfixed: true
+          exit-code: "1"

@@ -23,6 +23,7 @@ from app.documents.service import (
     DuplicateDocumentError,
     FileTooLargeError,
     UploadRejectedError,
+    WorkspaceQuotaExceededError,
     store_new_document,
 )
 from app.ingestion.queue import JobQueue
@@ -31,6 +32,7 @@ from app.schemas.documents import (
     DocumentResponse,
     DownloadLinkResponse,
 )
+from app.security.events import log_security_event
 from app.storage.base import ObjectStorage
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/documents", tags=["documents"])
@@ -82,6 +84,8 @@ async def upload_document(
             data=data,
             title=title,
             max_upload_bytes=settings.max_upload_bytes,
+            workspace_max_documents=settings.workspace_max_documents,
+            workspace_storage_quota_bytes=settings.workspace_storage_quota_bytes,
         )
     except FileTooLargeError:
         raise errors.file_too_large(settings.max_upload_bytes) from None
@@ -89,6 +93,15 @@ async def upload_document(
         raise errors.upload_rejected(rejection.code, rejection.message) from None
     except DuplicateDocumentError:
         raise errors.duplicate_document() from None
+    except WorkspaceQuotaExceededError as quota:
+        # The rejection rolls back this request's transaction, so it is logged
+        # rather than written to the append-only audit table.
+        log_security_event(
+            quota.code,
+            workspace_id=str(context.workspace.id),
+            actor_user_id=str(context.user.id),
+        )
+        raise errors.workspace_quota_exceeded(quota.code, quota.message) from None
     return DocumentResponse.model_validate(document)
 
 

@@ -25,8 +25,8 @@ The committed `.env.example` contains non-secret local defaults only.
 | `INGESTION_MAX_ATTEMPTS` | Attempts before a job dead-letters | `3` |
 | `INGESTION_STALE_AFTER_SECONDS` | Age before running/queued jobs are recovered | `300` |
 | `INGESTION_STORE_PAGE_IMAGES` | Store rendered PNGs of OCR'd pages | `true` |
-| `OCR_ENGINE` | `none` or `tesseract` | `none` |
-| `OCR_LANGUAGES` | Tesseract language codes | `tam+eng` |
+| `OCR_ENGINE` | `none`, `tesseract`, or `paddle` | `none` |
+| `OCR_LANGUAGES` | OCR language codes (`tam+eng`); `paddle` uses the first recognised code | `tam+eng` |
 | `CHUNK_MAX_CHARS` | Maximum characters per chunk | `1200` |
 | `CHUNK_OVERLAP_CHARS` | Context shared between neighboring chunks | `150` |
 | `EMBEDDING_PROVIDER` | Embedding backend (`local`) | `local` |

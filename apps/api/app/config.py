@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     ingestion_max_attempts: int = 3
     ingestion_stale_after_seconds: int = 300
     ingestion_store_page_images: bool = True
-    ocr_engine: Literal["none", "tesseract"] = "none"
+    ocr_engine: Literal["none", "tesseract", "paddle"] = "none"
     ocr_languages: str = "tam+eng"
     chunk_max_chars: int = 1200
     chunk_overlap_chars: int = 150

@@ -88,13 +88,19 @@ class ConfidencePolicy:
         warnings: list[str] = []
         if confidence < self._config.answer_confidence:
             warnings.append("supporting confidence is moderate")
-        if signals.partial_claims > 0 or signals.unsupported_claims > 0:
+        if (
+            signals.partial_claims > 0
+            or signals.unsupported_claims > 0
+            or signals.dropped_claims > 0
+        ):
             warnings.append("some proposed claims were dropped as unverifiable")
         if (
             signals.min_ocr_confidence is not None
             and signals.min_ocr_confidence < self._config.low_ocr_confidence
         ):
             warnings.append("cited evidence has low OCR reliability")
+        if signals.ocr_unknown_reliability:
+            warnings.append("cited evidence has OCR of unknown reliability")
         return warnings
 
 

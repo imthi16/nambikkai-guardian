@@ -148,6 +148,11 @@ async def test_escalates_and_abstains_when_support_and_contradiction_coexist() -
     assert terminal.decision == "escalate_for_review"
     assert terminal.trace.contradicted_claim_count == 1
     assert terminal.trace.supported_claim_count == 1
+    # A withheld answer must not still expose the verified claim/citation.
+    assert terminal.claims == ()
+    # abstention_reason is a stable code; decision_reason carries the prose.
+    assert terminal.abstention_reason == "escalate_for_review"
+    assert terminal.decision_reason
 
 
 async def test_abstains_on_empty_evidence() -> None:
@@ -158,6 +163,9 @@ async def test_abstains_on_empty_evidence() -> None:
     assert terminal.claims == ()
     assert terminal.confidence == 0.0
     assert terminal.abstention_reason == "insufficient_evidence"
+    # The rationale is populated even though the decision node never ran.
+    assert terminal.decision == "abstain"
+    assert terminal.decision_reason == "insufficient_evidence"
 
 
 async def test_abstains_when_evidence_below_sufficiency_threshold() -> None:

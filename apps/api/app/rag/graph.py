@@ -225,11 +225,17 @@ class RagGraph:
         claims = state.claims
         trace = state.trace
         confidence = sum(claim.confidence for claim in claims) / len(claims) if claims else None
+        # Recorded OCR confidences among cited evidence, and whether any cited
+        # chunk is OCR-derived with *no* recorded confidence (unknown quality,
+        # which must not be mistaken for born-digital reliability).
         ocr_values = [
             claim.citation.ocr_confidence
             for claim in claims
             if claim.citation.ocr_engine and claim.citation.ocr_confidence is not None
         ]
+        ocr_unknown = any(
+            claim.citation.ocr_engine and claim.citation.ocr_confidence is None for claim in claims
+        )
         signals = DecisionSignals(
             supported_claims=len(claims),
             partial_claims=trace.partial_claim_count,
@@ -237,8 +243,10 @@ class RagGraph:
             unsupported_claims=trace.unsupported_claim_count,
             evidence_count=trace.evidence_count,
             retrieved_count=trace.retrieved_count,
+            dropped_claims=trace.dropped_claim_count,
             verifier_confidence=confidence,
             min_ocr_confidence=min(ocr_values) if ocr_values else None,
+            ocr_unknown_reliability=ocr_unknown,
         )
         result = self._policy.decide(signals)
         trace.decision = result.outcome.value
@@ -277,27 +285,42 @@ class RagGraph:
         }
 
     async def _abstain(self, state: RagState) -> dict[str, object]:
-        """Return the fixed refusal, recording *why* only in the trace."""
+        """Return the fixed refusal, clearing any claims and recording *why*.
+
+        Claims are cleared here even if verification populated them: when the
+        decision gate withholds an answer (e.g. support and contradiction
+        coexist), the response must not still expose assertions the gate
+        intended to suppress. ``abstention_reason`` stays a stable machine code;
+        the human-readable rationale lives in ``decision_reason``, populated on
+        the early gates too so it is never empty.
+        """
         reason = self._abstention_reason(state)
+        decision_reason = state.decision_reason or reason
         trace = state.trace
         trace.outcome = AnswerOutcome.ABSTAINED.value
         trace.abstained = True
         trace.abstention_reason = reason
+        trace.decision = state.decision
+        trace.decision_reason = decision_reason
         trace.confidence = 0.0
         return {
             "outcome": AnswerOutcome.ABSTAINED,
             "answer_text": self._config.abstention_text,
             "confidence": 0.0,
             "abstention_reason": reason,
+            "decision": state.decision,
+            "decision_reason": decision_reason,
+            "claims": (),
             "trace": trace,
         }
 
     @staticmethod
     def _abstention_reason(state: RagState) -> str:
+        """A stable machine code for *why* the pipeline withheld an answer."""
         if not state.authorized:
             return "unauthorized"
         if not state.sufficient:
             return "insufficient_evidence"
-        # Reached the decision gate: report the policy's rationale for withholding
-        # (ask_for_clarification / abstain / escalate_for_review).
-        return state.decision_reason or "no_supported_claims"
+        # Reached the decision gate: the 5-way decision value is itself a stable
+        # code (ask_for_clarification / escalate_for_review / abstain).
+        return state.decision

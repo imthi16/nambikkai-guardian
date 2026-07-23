@@ -51,6 +51,22 @@ def test_low_ocr_answers_with_warning() -> None:
     assert "OCR" in result.reason
 
 
+def test_unknown_ocr_reliability_answers_with_warning() -> None:
+    # OCR evidence with no recorded confidence must not pass as an unqualified
+    # answer; it is flagged distinctly from born-digital (no OCR) evidence.
+    result = ConfidencePolicy().decide(_signals(ocr_unknown_reliability=True))
+    assert result.outcome is DecisionOutcome.ANSWER_WITH_WARNING
+    assert "unknown reliability" in result.reason
+
+
+def test_dropped_candidate_without_verdict_answers_with_warning() -> None:
+    # A candidate dropped without a verdict (e.g. unknown chunk id) still counts
+    # as a dropped claim, so a confident answer is warned rather than clean.
+    result = ConfidencePolicy().decide(_signals(dropped_claims=1))
+    assert result.outcome is DecisionOutcome.ANSWER_WITH_WARNING
+    assert "dropped" in result.reason
+
+
 def test_confidence_threshold_boundary_is_answer() -> None:
     # Exactly at the threshold answers without a warning (>= is the rule).
     result = ConfidencePolicy(DecisionPolicyConfig(answer_confidence=0.6)).decide(

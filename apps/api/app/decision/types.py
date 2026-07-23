@@ -52,8 +52,18 @@ class DecisionSignals:
     unsupported_claims: int
     evidence_count: int
     retrieved_count: int
+    # Total candidates dropped before the answer (partial, unsupported,
+    # contradicted, or citing an unknown chunk), so a claim dropped without a
+    # verdict still triggers the dropped-claims warning.
+    dropped_claims: int = 0
     verifier_confidence: float | None = None
+    # Least reliable *recorded* OCR confidence among cited evidence; ``None``
+    # when no cited evidence had a recorded OCR confidence.
     min_ocr_confidence: float | None = None
+    # True when at least one cited chunk is OCR-derived but its provider
+    # recorded no confidence — reliability is unknown, which is distinct from
+    # born-digital evidence and must not be treated as fully reliable.
+    ocr_unknown_reliability: bool = False
 
 
 @dataclass(frozen=True)

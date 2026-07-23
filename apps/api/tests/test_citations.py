@@ -160,9 +160,7 @@ async def test_quote_not_matching_stored_text_is_rejected() -> None:
 
 
 async def test_ocr_confidence_becomes_support_score() -> None:
-    resolver = CitationResolver(
-        FakeReader(_provenance(ocr_engine="paddle", ocr_confidence=0.42))
-    )
+    resolver = CitationResolver(FakeReader(_provenance(ocr_engine="paddle", ocr_confidence=0.42)))
     quote = "invoice"
     start = CONTENT.index(quote)
     resolved = await resolver.resolve(_reference(quote=quote, start=start, end=start + len(quote)))
@@ -171,9 +169,7 @@ async def test_ocr_confidence_becomes_support_score() -> None:
 
 
 async def test_ocr_chunk_without_recorded_confidence_is_reliable() -> None:
-    resolver = CitationResolver(
-        FakeReader(_provenance(ocr_engine="paddle", ocr_confidence=None))
-    )
+    resolver = CitationResolver(FakeReader(_provenance(ocr_engine="paddle", ocr_confidence=None)))
     quote = "invoice"
     start = CONTENT.index(quote)
     resolved = await resolver.resolve(_reference(quote=quote, start=start, end=start + len(quote)))

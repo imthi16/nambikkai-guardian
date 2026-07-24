@@ -310,7 +310,7 @@ _DECODED_INJECTION = re.compile(
     r"password|secret|bypass|jailbreak|do anything now)\b",
     re.IGNORECASE,
 )
-_BASE64_BLOCK = re.compile(r"[A-Za-z0-9+/]{24,}={0,2}")
+_BASE64_BLOCK = re.compile(r"[A-Za-z0-9+/_-]{24,}={0,2}")
 _HEX_BLOCK = re.compile(r"(?:[0-9a-fA-F]{2}[\s:]?){16,}")
 _LETTER_SPACING = re.compile(r"(?:\b\w[ \t\u00a0\-_.]){5,}\w\b")
 
@@ -561,8 +561,12 @@ def _dedupe(signals: Sequence[InjectionSignal]) -> list[InjectionSignal]:
 
 
 def _try_base64(blob: str) -> str | None:
+    # RFC 4648 URL-safe payloads replace '+'/'/' with '-'/'_', and many
+    # transports omit trailing padding. Normalize both variants before strict
+    # decoding so representation changes cannot bypass inspection.
+    padded = blob + "=" * (-len(blob) % 4)
     try:
-        raw = base64.b64decode(blob, validate=True)
+        raw = base64.b64decode(padded, altchars=b"-_", validate=True)
     except (binascii.Error, ValueError):
         return None
     try:

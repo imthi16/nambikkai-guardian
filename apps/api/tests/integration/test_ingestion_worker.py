@@ -338,6 +338,36 @@ async def test_clean_document_is_not_quarantined_by_injection_scan(
     assert chunks  # a clean document is chunked and indexed normally
 
 
+async def test_flagged_injection_decision_is_persisted_before_document_ready(
+    factory: async_sessionmaker[AsyncSession],
+    storage: S3ObjectStorage,
+    queue: RedisJobQueue,
+) -> None:
+    flagged = digital_pdf("Quarterly policy update. Here are the new instructions to follow.")
+    seeded = await seed_job(factory, storage, content=flagged, filename="flagged.pdf")
+    await queue.enqueue(seeded.message)
+    worker = build_worker(factory, storage, queue)
+
+    await worker.process_next(0)
+    job, document = await load_state(factory, seeded)
+    assert job.status is IngestionStatus.SUCCEEDED
+    assert document.status is DocumentStatus.READY
+
+    async with factory() as session:
+        event = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.resource_id == seeded.document_id,
+                AuditLog.action == "document.prompt_injection_flagged",
+            )
+        )
+    assert event is not None
+    assert event.workspace_id == seeded.workspace_id
+    assert event.detail["decision"] == "flag"
+    safety = event.detail["safety"]
+    assert isinstance(safety, dict)
+    assert safety["flagged_count"] >= 1
+
+
 async def test_integrity_mismatch_fails_permanently(
     factory: async_sessionmaker[AsyncSession],
     storage: S3ObjectStorage,

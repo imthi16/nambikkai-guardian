@@ -364,6 +364,7 @@ class IngestionWorker:
         # content never reaches the chunks table (and thus never retrieval or
         # generation). A quarantine verdict aborts the stage via the shared
         # quarantine path, leaving no chunk rows behind.
+        flagged_report: DocumentSafetyReport | None = None
         if self._scan_injection:
             report = self._injection_scanner.scan_chunks(
                 [(index, draft.content) for index, draft in enumerate(drafts)]
@@ -372,6 +373,7 @@ class IngestionWorker:
                 self._log_injection(message, content, report)
                 raise QuarantinedError(report.reason)
             if report.trace.flagged_count:
+                flagged_report = report
                 logger.warning(
                     "document has flagged-but-allowed chunks",
                     extra={
@@ -382,6 +384,17 @@ class IngestionWorker:
 
         async with session_scope(self._factory) as session:
             await bind_workspace(session, message.workspace_id)
+            if flagged_report is not None:
+                await AuditLogRepository(session).record(
+                    action="document.prompt_injection_flagged",
+                    resource_type="document",
+                    resource_id=content.document_id,
+                    workspace_id=message.workspace_id,
+                    detail={
+                        "decision": flagged_report.decision.value,
+                        "safety": flagged_report.trace.as_metadata(),
+                    },
+                )
             await session.execute(
                 delete(Chunk).where(Chunk.document_version_id == content.version_id)
             )

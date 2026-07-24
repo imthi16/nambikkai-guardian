@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from unittest.mock import AsyncMock
 
 import pytest
+from app.db.models.enums import DocumentStatus
 from app.db.repositories.chunks import LexicalMatch
 from app.db.repositories.embeddings import VectorMatch
 from app.embeddings.types import EmbeddingVector
 from app.retrieval import service as service_module
+from app.retrieval.fusion import FusedCandidate
 from app.retrieval.service import HybridRetrievalService, RetrievalConfig
 from app.retrieval.types import RetrievalFilters, RetrievedChunk
 
@@ -115,6 +118,26 @@ def _retrieved(chunk_id: uuid.UUID, score: float) -> RetrievedChunk:
         ocr_engine=None,
         ocr_confidence=None,
     )
+
+
+async def test_hydrate_query_requires_ready_document() -> None:
+    session = AsyncMock()
+    session.execute.return_value = []
+    service = HybridRetrievalService(
+        session=session,
+        embedding_service=FakeEmbeddingService(),  # type: ignore[arg-type]
+        config=RetrievalConfig(rerank_enabled=False),
+    )
+
+    await service._hydrate(
+        WORKSPACE,
+        [FusedCandidate(chunk_id=_chunk_id(1), score=1.0, ranks={"lexical": 1})],
+    )
+
+    statement = session.execute.await_args.args[0]
+    compiled = statement.compile()
+    assert "JOIN documents" in str(compiled)
+    assert DocumentStatus.READY in compiled.params.values()
 
 
 async def test_service_fuses_both_sources_and_orders_results(

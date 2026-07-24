@@ -22,7 +22,8 @@ from dataclasses import dataclass, replace
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.documents import Chunk, DocumentVersion
+from app.db.models.documents import Chunk, Document, DocumentVersion
+from app.db.models.enums import DocumentStatus
 from app.db.repositories.chunks import ChunkRepository, LexicalMatch
 from app.db.repositories.embeddings import ChunkEmbeddingRepository, VectorMatch
 from app.embeddings.service import EmbeddingService
@@ -214,8 +215,9 @@ class HybridRetrievalService:
     ) -> list[RetrievedChunk]:
         """Load full chunk provenance for fused ids, preserving fused order.
 
-        The load is workspace-scoped again as defense in depth: even if a
-        fused id somehow referenced another tenant, it could not be hydrated.
+        The load is workspace-scoped and rechecks the owning document's READY
+        status as defense in depth. This closes the race where a candidate is
+        selected while READY but becomes quarantined before hydration.
         """
         if not fused:
             return []
@@ -224,7 +226,13 @@ class HybridRetrievalService:
         rows = await self._session.execute(
             select(Chunk, DocumentVersion.document_id)
             .join(DocumentVersion, Chunk.document_version_id == DocumentVersion.id)
-            .where(Chunk.workspace_id == workspace_id, Chunk.id.in_(chunk_ids))
+            .join(Document, DocumentVersion.document_id == Document.id)
+            .where(
+                Chunk.workspace_id == workspace_id,
+                Document.workspace_id == workspace_id,
+                Document.status == DocumentStatus.READY,
+                Chunk.id.in_(chunk_ids),
+            )
         )
         by_id: dict[uuid.UUID, tuple[Chunk, uuid.UUID]] = {
             chunk.id: (chunk, document_id) for chunk, document_id in rows

@@ -12,10 +12,18 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
-from app.db.models.documents import EMBEDDING_DIMENSIONS, Chunk, ChunkEmbedding, DocumentVersion
+import pytest
+from app.db.models.documents import (
+    EMBEDDING_DIMENSIONS,
+    Chunk,
+    ChunkEmbedding,
+    Document,
+    DocumentVersion,
+)
 from app.db.models.enums import DocumentStatus
 from app.db.models.identity import User, Workspace
 from app.embeddings.types import EmbeddingVector
+from app.retrieval.fusion import FusedCandidate
 from app.retrieval.service import HybridRetrievalService, RetrievalConfig
 from app.retrieval.types import RetrievalFilters, RetrievedChunk
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -332,6 +340,39 @@ async def test_cross_tenant_query_never_returns_other_workspace_chunks(
     returned = _ids(result.chunks)
     # Nothing from B leaked, regardless of how strong the match would have been.
     assert foreign.id not in returned
+
+
+@pytest.mark.parametrize(
+    "non_ready_status",
+    [DocumentStatus.PROCESSING, DocumentStatus.QUARANTINED, DocumentStatus.FAILED],
+)
+async def test_hydration_rechecks_ready_status_after_candidate_selection(
+    db_session: AsyncSession, non_ready_status: DocumentStatus
+) -> None:
+    owner = await factories.make_user(db_session)
+    workspace = await factories.make_workspace(db_session, owner)
+    candidate = await _seed_chunk(
+        db_session,
+        workspace=workspace,
+        owner=owner,
+        content="candidate selected before quarantine",
+        language="eng",
+    )
+    version = await db_session.get(DocumentVersion, candidate.document_version_id)
+    assert version is not None
+    document = await db_session.get(Document, version.document_id)
+    assert document is not None
+
+    fused = [FusedCandidate(chunk_id=candidate.id, score=1.0, ranks={"lexical": 1})]
+    service = _service(db_session, _dense_vector())
+    assert [chunk.chunk_id for chunk in await service._hydrate(workspace.id, fused)] == [
+        candidate.id
+    ]
+
+    document.status = non_ready_status
+    await db_session.flush()
+
+    assert await service._hydrate(workspace.id, fused) == []
 
 
 def _reranking_service(

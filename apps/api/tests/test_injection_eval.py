@@ -57,7 +57,7 @@ def _evaluate() -> _Metrics:
 
 
 def test_corpus_version_is_pinned() -> None:
-    assert CORPUS_VERSION == "2026-07-v1"
+    assert CORPUS_VERSION == "2026-07-v2"
 
 
 def test_attack_recall_meets_floor() -> None:

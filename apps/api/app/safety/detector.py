@@ -172,6 +172,16 @@ _RULES: tuple[_Rule, ...] = (
         r"[\w\s\-]{0,25}\b(?:ignore|disregard|forget|override|purakkani\w*)\b",
     ),
     _Rule(
+        # Tamil combining marks make Latin-style word boundaries unreliable.
+        # Match stable lexical stems so common case and imperative suffixes are
+        # covered without treating a lone mention of instructions as malicious.
+        "tamil_ignore_previous",
+        InjectionCategory.INSTRUCTION_OVERRIDE,
+        InjectionSeverity.HIGH,
+        r"(?:முந்தைய|முன்னைய|மேலுள்ள|மேற்கண்ட|அனைத்து)[^.\n]{0,60}"
+        r"அறிவுறுத்தல்[^.\n]{0,35}புறக்கணி",
+    ),
+    _Rule(
         # A bare "system prompt" reference is rare in genuine document prose but
         # ubiquitous in exfiltration attempts; medium on its own, decisive when
         # it co-occurs with an override or reveal signal.
@@ -214,6 +224,14 @@ _RULES: tuple[_Rule, ...] = (
         r"\b(?:prompt|instruction|instructions|message|rules|configuration)\b",
     ),
     _Rule(
+        "tamil_system_prompt_reveal",
+        InjectionCategory.EXFILTRATION,
+        InjectionSeverity.HIGH,
+        r"(?:கணினி|அமைப்பு|மறைக்கப்பட்ட|ரகசிய)[^.\n]{0,30}"
+        r"(?:தூண்டுத|அறிவுறுத்தல)[^.\n]{0,35}"
+        r"(?:வெளிப்படுத்து|காட்டு|அச்சிடு|தெரிவி)",
+    ),
+    _Rule(
         "exfiltrate_secrets",
         InjectionCategory.EXFILTRATION,
         InjectionSeverity.HIGH,
@@ -225,7 +243,22 @@ _RULES: tuple[_Rule, ...] = (
         "role_impersonation",
         InjectionCategory.ROLE_IMPERSONATION,
         InjectionSeverity.HIGH,
-        r"(?:^|[\n>\-\*\s])(?:system|assistant|developer)\s*(?:message|prompt)?\s*:",
+        r"(?:^|[\n>\-\*\s])(?:system|assistant|developer)\s*(?:message|prompt)?\s*:\s*"
+        r"(?:"
+        r"(?:please\s+)?(?:ignore|disregard|forget|override|reveal|show|print|output|"
+        r"leak|exfiltrate|bypass|disable|disclose|expose)\b[^.\n]{0,35}"
+        r"\b(?:instruction|instructions|prompt|prompts|rule|rules|guideline|guidelines|"
+        r"guardrail|guardrails|safety|filter|filters|secret|password|credential|token)\b"
+        r"|(?:send|email|forward|post|upload)\b[^.\n]{0,30}"
+        r"\b(?:api[ _-]?key|secret|password|credential|token|private key)\b"
+        r"|[^.\n]{0,25}\b(?:assistant|ai|model|you|i)\b[^.\n]{0,25}"
+        r"\b(?:must|should|will|shall|need to|have to|am going to)\b[^.\n]{0,30}"
+        r"\b(?:ignore|disregard|forget|override|reveal|show|print|output|send|email|"
+        r"forward|post|upload|leak|exfiltrate|bypass|disable|disclose|expose)\b"
+        r"[^.\n]{0,35}\b(?:instruction|instructions|prompt|prompts|rule|rules|guideline|"
+        r"guidelines|guardrail|guardrails|safety|filter|filters|api[ _-]?key|secret|"
+        r"password|credential|token|private key)\b"
+        r")",
     ),
     _Rule(
         "you_are_now",
